@@ -143,13 +143,13 @@
             <h2 class="text-xl font-semibold">Recorded sets</h2>
           </div>
           <div class="flex flex-wrap gap-2 items-center">
-            <input id="library-search" type="search" placeholder="Search channel, date, file..." class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+            <input id="library-search" type="search" placeholder="Search channel, date, file..." class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
             <select id="library-channel" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
               <option value="all">All channels</option>
             </select>
-            <input id="library-from" type="date" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
-            <input id="library-to" type="date" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
-            <select id="library-sort" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
+            <input id="library-from" type="date" class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+            <input id="library-to" type="date" class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+            <select id="library-sort" class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
               <option value="date-desc">Newest first</option>
               <option value="date-asc">Oldest first</option>
               <option value="channel-asc">Channel (A→Z)</option>
@@ -161,8 +161,8 @@
               <option value="name-asc">Name (A→Z)</option>
               <option value="name-desc">Name (Z→A)</option>
             </select>
-            <button id="library-refresh" class="px-3 py-2 rounded-xl border border-sky-400/40 bg-sky-500/15 text-sm font-semibold text-sky-50" type="button">Refresh</button>
-            <button id="library-reset" class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-sm font-semibold" type="button">Clear</button>
+            <button id="library-refresh" class="hidden sm:inline-flex px-3 py-2 rounded-xl border border-sky-400/40 bg-sky-500/15 text-sm font-semibold text-sky-50" type="button">Refresh</button>
+            <button id="library-reset" class="hidden sm:inline-flex px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-sm font-semibold" type="button">Clear</button>
             <div class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold" id="library-count">—</div>
           </div>
         </div>
