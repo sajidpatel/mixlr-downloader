@@ -165,7 +165,6 @@ const updateLibraryPlayingFlag = () => {
 const playerIcons = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>',
   pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"></path></svg>',
-  heart: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-6.5-4.35-9-9a5.5 5.5 0 0 1 9-6 5.5 5.5 0 0 1 9 6c-2.5 4.65-9 9-9 9Z"></path></svg>',
   back: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6.5 5v14"></path><path d="M18 5 9 12l9 7V5Z" fill="currentColor"></path></svg>',
   forward: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 5v14"></path><path d="m6 5 9 7-9 7V5Z" fill="currentColor"></path></svg>',
   repeat: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7H5a3 3 0 0 0-3 3v1.5"></path><path d="M7 10H5a3 3 0 0 0-3 3v1.5"></path><path d="M6 17H5l-2.5-2.5L5 12h1"></path><path d="M18 17h1a3 3 0 0 0 3-3v-1.5"></path><path d="M17 14h2a3 3 0 0 0 3-3V9.5"></path><path d="M18 7h1l2.5 2.5L19 12h-1"></path></svg>',
@@ -633,7 +632,6 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
           </button>
           <div class="player-icon-row">
             ${downloadBtn}
-            <button class="player-icon-btn btn-like" type="button" title="Favorite">${playerIcons.heart}</button>
             <button class="player-icon-btn btn-back" type="button" title="Back 10s">${playerIcons.back}</button>
             <button class="player-icon-btn btn-forward" type="button" title="Forward 15s">${playerIcons.forward}</button>
             <button class="player-icon-btn btn-repeat" type="button" title="Loop">${playerIcons.repeat}</button>
@@ -656,7 +654,6 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     const backBtn = card.querySelector('.btn-back');
     const forwardBtn = card.querySelector('.btn-forward');
     const repeatBtn = card.querySelector('.btn-repeat');
-    const likeBtn = card.querySelector('.btn-like');
 
     if (playSeenSession[item.url]) {
       if (playPill) playPill.textContent = `${plays} play${plays === 1 ? '' : 's'}`;
@@ -726,10 +723,6 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     repeatBtn?.addEventListener('click', () => {
       repeatBtn.classList.toggle('active');
       audio.loop = repeatBtn.classList.contains('active');
-    });
-
-    likeBtn?.addEventListener('click', () => {
-      likeBtn.classList.toggle('active');
     });
 
     audio.addEventListener('loadedmetadata', updateProgress);
