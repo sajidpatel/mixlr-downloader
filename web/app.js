@@ -784,16 +784,6 @@ const populateChannelFilter = (items = []) => {
   }
 };
 
-document.getElementById('stop-all').addEventListener('click', async () => {
-  try {
-    await api('/api/recorder/stop-all', { method: 'POST' });
-    showToast('Stopped all recordings');
-    loadStatus();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-});
-
 document.getElementById('manual-channel-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const channel = manualChannelInput.value.trim();
