@@ -72,7 +72,7 @@ if (typeof HTMLMediaElement !== 'undefined') {
 let pollInterval;
 
 const api = async (path, options = {}) => {
-  const opts = { ...options };
+  const opts = { cache: 'no-store', ...options };
   if (opts.body && !opts.headers) {
     opts.headers = { 'Content-Type': 'application/json' };
   }

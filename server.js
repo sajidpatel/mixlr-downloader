@@ -548,6 +548,7 @@ app.use(express.static(webRoot));
 app.use('/live', express.static(hlsRoot));
 
 app.get('/api/status', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
   const runningRaw = await recorderService.getRunning();
   const running = runningRaw.map((item) => {
     // Normalize to an absolute path before computing a safe relative path.
