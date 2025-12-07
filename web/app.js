@@ -1,4 +1,3 @@
-const channelSelect = document.getElementById('channel-select');
 const manualChannelInput = document.getElementById('manual-channel');
 const runningBody = document.getElementById('running-body');
 const monitoringBadge = document.getElementById('monitoring-badge');
@@ -464,19 +463,8 @@ const renderRunning = (running) => {
   });
 };
 
-const populateChannels = (channels = []) => {
-  channelSelect.innerHTML = '';
-  channels.forEach((channel) => {
-    const option = document.createElement('option');
-    option.value = channel;
-    option.textContent = channel;
-    channelSelect.appendChild(option);
-  });
-};
-
 const renderStatus = (data) => {
   const { recorder, converter, live } = data;
-  populateChannels(recorder.channels);
   setBadge(monitoringBadge, recorder.monitoring, recorder.monitoring ? 'Monitoring' : 'Stopped');
   monitoringState.textContent = recorder.monitoring ? 'Monitoring' : 'Idle';
   runningCount.textContent = recorder.running?.length ?? 0;
@@ -800,19 +788,6 @@ document.getElementById('stop-all').addEventListener('click', async () => {
   try {
     await api('/api/recorder/stop-all', { method: 'POST' });
     showToast('Stopped all recordings');
-    loadStatus();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-});
-
-document.getElementById('channel-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const channel = channelSelect.value;
-  if (!channel) return;
-  try {
-    await api('/api/recorder/start', { method: 'POST', body: JSON.stringify({ channel }) });
-    showToast(`Triggered ${channel}`);
     loadStatus();
   } catch (err) {
     showToast(err.message, 'error');

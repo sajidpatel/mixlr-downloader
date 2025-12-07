@@ -50,21 +50,12 @@
           <div id="monitoring-badge" class="px-3 py-1 rounded-full border border-white/15 bg-white/5 text-xs font-semibold">Unknown</div>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="space-y-2">
-            <label class="text-sm text-slate-300" for="channel-select">Start a single channel</label>
-            <form id="channel-form" class="flex gap-2">
-              <select id="channel-select" class="w-full rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-slate-100"></select>
-              <button class="px-3 py-2 rounded-xl bg-orange-500 text-slate-900 font-semibold" type="submit">Start</button>
-            </form>
-          </div>
-          <div class="space-y-2">
-            <label class="text-sm text-slate-300" for="manual-channel">Or paste a channel slug</label>
-            <form id="manual-channel-form" class="flex gap-2">
-              <input id="manual-channel" type="text" placeholder="channel slug" class="w-full rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-slate-100" />
-              <button class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 font-semibold" type="submit">Start</button>
-            </form>
-          </div>
+        <div class="space-y-2">
+          <label class="text-sm text-slate-300" for="manual-channel">Start a channel</label>
+          <form id="manual-channel-form" class="flex flex-wrap gap-2">
+            <input id="manual-channel" type="text" placeholder="channel slug" class="flex-1 min-w-[220px] rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-slate-100" />
+            <button class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 font-semibold" type="submit">Start</button>
+          </form>
         </div>
 
         <div class="flex items-center justify-between mt-2">
