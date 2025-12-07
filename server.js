@@ -18,6 +18,9 @@ const webRoot = path.join(__dirname, 'web');
 const recordingsRoot = path.join(__dirname, 'recordings');
 const hlsRoot = path.join(__dirname, 'hls');
 
+// Start monitoring automatically on boot.
+recorderService.startMonitoring();
+
 const MAX_PORT_ATTEMPTS = 50; // safety cap to avoid infinite loops
 const FOLLOW_IDLE_TIMEOUT_MS = 300_000; // 5 minutes idle before closing a follow stream
 const FOLLOW_POLL_INTERVAL_MS = 800;

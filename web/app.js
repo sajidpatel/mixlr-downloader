@@ -1,7 +1,6 @@
 const channelSelect = document.getElementById('channel-select');
 const manualChannelInput = document.getElementById('manual-channel');
 const runningBody = document.getElementById('running-body');
-const monitoringToggle = document.getElementById('monitor-toggle');
 const monitoringBadge = document.getElementById('monitoring-badge');
 const monitoringState = document.getElementById('monitoring-state');
 const runningCount = document.getElementById('running-count');
@@ -29,7 +28,6 @@ let playCounts = {};
 let libraryIsPlaying = false;
 let playSeenSession = {};
 let libraryHasLoaded = false;
-let monitoringActive = false;
 const liveHlsMap = new WeakMap();
 const liveMseMap = new WeakMap();
 
@@ -221,14 +219,6 @@ const setBadgeVariant = (el, label, variant = 'muted') => {
   const map = { muted: badgeMuted, success: badgeSuccess, danger: badgeDanger };
   el.className = `${badgeBase} ${map[variant] || badgeMuted}`;
   el.textContent = label;
-};
-
-const updateMonitoringToggle = () => {
-  if (!monitoringToggle) return;
-  const activeClasses = 'px-4 py-2 rounded-xl border border-white/15 bg-white/5 font-semibold';
-  const inactiveClasses = 'px-4 py-2 rounded-xl bg-gradient-to-r from-orange-400 to-orange-500 text-slate-950 font-semibold shadow';
-  monitoringToggle.textContent = monitoringActive ? 'Stop monitoring' : 'Start monitoring';
-  monitoringToggle.className = monitoringActive ? activeClasses : inactiveClasses;
 };
 
 const stopAllLiveAudio = () => {
@@ -489,8 +479,6 @@ const renderStatus = (data) => {
   populateChannels(recorder.channels);
   setBadge(monitoringBadge, recorder.monitoring, recorder.monitoring ? 'Monitoring' : 'Stopped');
   monitoringState.textContent = recorder.monitoring ? 'Monitoring' : 'Idle';
-  monitoringActive = !!recorder.monitoring;
-  updateMonitoringToggle();
   runningCount.textContent = recorder.running?.length ?? 0;
   renderRunning(recorder.running);
 
@@ -808,37 +796,6 @@ const populateChannelFilter = (items = []) => {
   }
 };
 
-monitoringToggle?.addEventListener('click', async () => {
-  if (monitoringToggle.disabled) return;
-  const wasActive = monitoringActive;
-  monitoringToggle.disabled = true;
-  monitoringToggle.textContent = wasActive ? 'Stopping…' : 'Starting…';
-  try {
-    if (wasActive) {
-      await api('/api/recorder/monitor/stop', { method: 'POST', body: JSON.stringify({ stopRecordings: false }) });
-      showToast('Monitoring stopped');
-    } else {
-      await api('/api/recorder/monitor/start', { method: 'POST', body: JSON.stringify({}) });
-      showToast('Monitoring started');
-    }
-    await loadStatus();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    monitoringToggle.disabled = false;
-    updateMonitoringToggle();
-  }
-});
-
-document.getElementById('refresh-status').addEventListener('click', async () => {
-  try {
-    await api('/api/recorder/refresh', { method: 'POST' });
-    loadStatus();
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-});
-
 document.getElementById('stop-all').addEventListener('click', async () => {
   try {
     await api('/api/recorder/stop-all', { method: 'POST' });
@@ -901,7 +858,6 @@ const startPolling = () => {
   pollInterval = setInterval(loadStatus, 7000);
 };
 
-updateMonitoringToggle();
 loadStatus();
 startPolling();
 loadPlayCounts();
