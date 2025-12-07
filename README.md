@@ -37,5 +37,8 @@ Create a `.env` (or set vars in your host):
 - `npm run dev:css` – watch Tailwind during development
 - `npm run recorder:tui` – terminal UI recorder (legacy helper)
 
+## Docs
+- Detailed setup, usage, and troubleshooting: `docs/guide.md`
+
 ## License
 MIT.
