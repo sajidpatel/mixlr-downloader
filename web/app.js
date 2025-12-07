@@ -488,7 +488,7 @@ const renderStatus = (data) => {
   const { recorder, converter, live } = data;
   populateChannels(recorder.channels);
   setBadge(monitoringBadge, recorder.monitoring, recorder.monitoring ? 'Monitoring' : 'Stopped');
-  monitoringState.textContent = recorder.monitoring ? 'Watching channels' : 'Idle';
+  monitoringState.textContent = recorder.monitoring ? 'Monitoring' : 'Idle';
   monitoringActive = !!recorder.monitoring;
   updateMonitoringToggle();
   runningCount.textContent = recorder.running?.length ?? 0;
