@@ -580,7 +580,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     card.dataset.songIndex = idx;
     const when = formatTime(item.date ?? item.mtime);
     const durationSeconds = Number.isFinite(item.duration) ? item.duration : 0;
-    const duration = durationSeconds ? formatDuration(durationSeconds) : '—';
+    const duration = durationSeconds ? formatDuration(durationSeconds) : null;
     const playbackUrl = item.downloadUrl || item.url;
     const playKey = playbackUrl || item.url;
     const plays = playCounts[playKey] || 0;
@@ -619,7 +619,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
             <input type="range" class="player-range" min="0" max="${Math.max(durationSeconds || 0, 1)}" value="0" step="0.01" aria-label="Scrub ${displayName}" />
             <div class="player-time-row">
               <span class="player-time player-time--current">00:00</span>
-              <span class="player-time player-time--duration">${durationSeconds ? formatClock(durationSeconds) : '00:00'}</span>
+              <span class="player-time player-time--duration">${durationSeconds ? formatClock(durationSeconds) : ''}</span>
             </div>
           </div>
         </div>
@@ -666,14 +666,17 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
 
     const updateProgress = () => {
       if (!range) return;
-      const max = audio.duration && Number.isFinite(audio.duration) ? audio.duration : Number(range.max) || durationSeconds || 1;
+      const max = audio.duration && Number.isFinite(audio.duration) ? audio.duration : Number(range.max) || (durationSeconds || 1);
       const value = Math.min(max, audio.currentTime || 0);
       range.max = max;
       range.value = value;
       updateRangeProgress(range, value, max);
       if (currentEl) currentEl.textContent = formatClock(value);
       const durationEl = card.querySelector('.player-time--duration');
-      if (durationEl && max) durationEl.textContent = formatClock(max);
+      if (durationEl && Number.isFinite(max)) {
+        durationEl.textContent = formatClock(max);
+        durationEl.classList.remove('opacity-40');
+      }
     };
 
     const handlePlayCount = () => {
