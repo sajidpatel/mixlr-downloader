@@ -24,13 +24,6 @@ npm start            # serves http://localhost:3000
 Create a `.env` (or set vars in your host):
 - `PORT` (default 3000)
 
-## Deploy to cPanel (Node.js app)
-1) In cPanel, open **Setup Node.js App** (or similar).  
-2) Set App Directory to your uploaded project folder and Startup file to `server.js`.  
-3) Install deps in that directory: `npm install` (via terminal or the panel’s button).  
-4) Set env vars (PORT) in the app config or via `.env` in the app directory.  
-5) Start/Restart the app. If a subdomain needs proxying, point it to the app using Apache/Passenger or an `.htaccess` proxy to `127.0.0.1:PORT`.
-
 ## Scripts
 - `npm start` – run server + web UI
 - `npm run build:css` – build Tailwind CSS

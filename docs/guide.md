@@ -27,12 +27,6 @@ npm start                   # serves http://localhost:3000
   - Search, filter by channel/date, sort, and play/download recordings.
   - Library data loads once when opening the tab; click Refresh to fetch new recordings without losing filters.
 
-## Deploy to cPanel (Node.js app)
-1) In cPanel, open **Setup Node.js App** (or similar) and point the App Directory to this project; set Startup file to `server.js`.  
-2) Install dependencies in that directory: `npm install`.  
-3) Set env vars (e.g., `PORT`) via the app config or a `.env` in the app directory.  
-4) Start/Restart the app. If a subdomain needs proxying, point it to the app using Apache/Passenger or an `.htaccess` proxy to `127.0.0.1:PORT`.
-
 ## Troubleshooting
 - **Port already in use**: change `PORT` in `.env` or free the port and restart.
 - **FFmpeg not found**: install FFmpeg and ensure it is on PATH (`brew install ffmpeg`, `apt-get install ffmpeg`, or download binaries).
