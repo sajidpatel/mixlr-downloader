@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mixlr Recorder + Converter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./dist/tailwind.css" />
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-50 font-sans">
+  <div class="max-w-6xl mx-auto px-4 pb-10 pt-6 space-y-6">
+    <header class="flex flex-col lg:flex-row gap-6 items-start border border-white/10 bg-gradient-to-br from-sky-500/15 via-slate-900/70 to-orange-400/10 rounded-3xl p-6 shadow-xl">
+      <div class="space-y-3">
+        <p class="uppercase tracking-[0.2em] text-xs text-slate-300">Mixlr toolkit</p>
+        <h1 class="text-3xl leading-tight font-semibold">Record, monitor, and convert without leaving the browser.</h1>
+        <p class="text-slate-300 max-w-2xl">Start/stop Mixlr recordings, watch what is live, batch-convert AAC captures to MP3, and listen to live feeds directly.</p>
+        <div class="flex flex-wrap gap-2">
+          <button id="monitor-toggle" class="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-400 to-orange-500 text-slate-950 font-semibold shadow">Start monitoring</button>
+          <button id="refresh-status" class="px-4 py-2 rounded-xl border border-sky-400/50 bg-sky-500/10 text-sky-50 font-semibold">Check now</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Monitor</p>
+          <p id="monitoring-state" class="text-2xl font-semibold mt-1">—</p>
+        </div>
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Active recordings</p>
+          <p id="running-count" class="text-2xl font-semibold mt-1">0</p>
+        </div>
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-400">Last conversion</p>
+          <p id="last-conversion" class="text-2xl font-semibold mt-1">—</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="inline-flex border border-white/10 bg-white/5 rounded-2xl p-1 gap-1">
+      <button class="tab-btn active px-3 py-2 rounded-xl border border-white/10 bg-white/15 font-semibold text-sm" data-tab="control">Control</button>
+      <button class="tab-btn px-3 py-2 rounded-xl border border-transparent text-sm font-semibold text-slate-300" data-tab="converter">Converter</button>
+      <button class="tab-btn px-3 py-2 rounded-xl border border-transparent text-sm font-semibold text-slate-300" data-tab="library">Library</button>
+    </div>
+
+    <main class="grid gap-4 tab-panel" data-tab-panel="control">
+      <section class="bg-slate-900/70 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="uppercase tracking-[0.18em] text-xs text-slate-400">Recorder</p>
+            <h2 class="text-xl font-semibold">Mixlr live watcher</h2>
+          </div>
+          <div id="monitoring-badge" class="px-3 py-1 rounded-full border border-white/15 bg-white/5 text-xs font-semibold">Unknown</div>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="space-y-2">
+            <label class="text-sm text-slate-300" for="channel-select">Start a single channel</label>
+            <form id="channel-form" class="flex gap-2">
+              <select id="channel-select" class="w-full rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-slate-100"></select>
+              <button class="px-3 py-2 rounded-xl bg-orange-500 text-slate-900 font-semibold" type="submit">Start</button>
+            </form>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm text-slate-300" for="manual-channel">Or paste a channel slug</label>
+            <form id="manual-channel-form" class="flex gap-2">
+              <input id="manual-channel" type="text" placeholder="channel slug" class="w-full rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-slate-100" />
+              <button class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 font-semibold" type="submit">Start</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between mt-2">
+          <div>
+            <p class="uppercase tracking-[0.18em] text-xs text-slate-400">Active recordings</p>
+            <h3 id="table-title" class="text-lg font-semibold">Live files</h3>
+          </div>
+          <button id="stop-all" class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 font-semibold">Stop all</button>
+        </div>
+        <div class="overflow-hidden rounded-2xl border border-white/10">
+          <table class="w-full text-sm text-left">
+            <thead class="bg-white/5 text-slate-300 uppercase text-xs tracking-wide">
+              <tr>
+                <th class="px-3 py-2">Stage</th>
+                <th class="px-3 py-2">File</th>
+                <th class="px-3 py-2">Size</th>
+                <th class="px-3 py-2">Play</th>
+              </tr>
+            </thead>
+            <tbody id="running-body" class="divide-y divide-white/5">
+              <tr><td colspan="4" class="px-3 py-3 text-center text-slate-400">No recordings yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-between mt-4">
+          <div>
+            <p class="uppercase tracking-[0.18em] text-xs text-slate-400">Live feeds</p>
+            <h3 class="text-lg font-semibold">Listen now</h3>
+          </div>
+          <div id="live-count" class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold">—</div>
+        </div>
+        <div id="live-body" class="grid gap-4 live-grid">
+          <p class="text-slate-400">No live feeds right now.</p>
+        </div>
+      </section>
+    </main>
+
+    <main class="grid gap-4 tab-panel hidden" data-tab-panel="converter">
+      <section class="bg-slate-900/70 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="uppercase tracking-[0.18em] text-xs text-slate-400">Converter</p>
+            <h2 class="text-xl font-semibold">AAC → MP3 batch</h2>
+          </div>
+          <div id="convert-badge" class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold">Idle</div>
+        </div>
+
+        <form id="convert-form" class="space-y-3">
+          <div class="space-y-2">
+            <label for="input-dir" class="text-sm text-slate-300">Folder to scan</label>
+            <input id="input-dir" type="text" value="recordings" class="w-full rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-slate-100" />
+          </div>
+
+          <label class="flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox" id="delete-source" class="accent-orange-400" />
+            <span>Delete source AAC files after conversion</span>
+          </label>
+
+          <button class="px-4 py-2 rounded-xl bg-orange-500 text-slate-900 font-semibold" type="submit" id="convert-btn">Run converter</button>
+        </form>
+
+        <div class="rounded-2xl border border-dashed border-white/10 bg-white/5 px-3 py-3 text-slate-300" id="convert-status">No runs yet.</div>
+      </section>
+    </main>
+
+    <main class="grid gap-4 tab-panel hidden" data-tab-panel="library">
+      <section class="bg-slate-900/70 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p class="uppercase tracking-[0.18em] text-xs text-slate-400">Library</p>
+            <h2 class="text-xl font-semibold">Recorded sets</h2>
+          </div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <input id="library-search" type="search" placeholder="Search channel, date, file..." class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+            <select id="library-channel" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
+              <option value="all">All channels</option>
+            </select>
+            <input id="library-from" type="date" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+            <input id="library-to" type="date" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+            <select id="library-sort" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
+              <option value="date-desc">Newest first</option>
+              <option value="date-asc">Oldest first</option>
+              <option value="channel-asc">Channel (A→Z)</option>
+              <option value="channel-desc">Channel (Z→A)</option>
+              <option value="duration-desc">Duration (long→short)</option>
+              <option value="duration-asc">Duration (short→long)</option>
+              <option value="size-desc">Size (large→small)</option>
+              <option value="size-asc">Size (small→large)</option>
+              <option value="name-asc">Name (A→Z)</option>
+              <option value="name-desc">Name (Z→A)</option>
+            </select>
+            <button id="library-refresh" class="px-3 py-2 rounded-xl border border-sky-400/40 bg-sky-500/15 text-sm font-semibold text-sky-50" type="button">Refresh</button>
+            <button id="library-reset" class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-sm font-semibold" type="button">Clear</button>
+            <div class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold" id="library-count">—</div>
+          </div>
+        </div>
+
+        <div id="library-body" class="grid gap-5 library-grid">
+          <p class="text-slate-400">No recordings yet.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm text-slate-50 shadow-lg"></div>
+  <script src="app.js"></script>
+</body>
+</html>

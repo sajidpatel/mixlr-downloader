@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+
+# OS junk
+.DS_Store
+
+# Generated audio/output
+recordings/
+hls/

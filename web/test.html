@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TafseerRaheemi Player</title>
+    <style>
+        /* CSS STYLING */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .player-card {
+            background: white;
+            width: 350px;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        /* Branding Color from your JSON (#800000) */
+        .brand-color { color: #800000; }
+
+        .channel-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid #800000;
+            margin-bottom: 15px;
+        }
+
+        h2 { margin: 0; font-size: 1.4rem; color: #333; }
+        p { margin: 5px 0 20px; color: #666; font-size: 0.95rem; }
+
+        /* Status Badges */
+        .badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 15px;
+        }
+
+        .is-live {
+            background-color: #ffe0e0;
+            color: #d32f2f;
+            border: 1px solid #ffcdcd;
+            animation: pulse 2s infinite;
+        }
+
+        .is-offline {
+            background-color: #eee;
+            color: #777;
+        }
+
+        /* Audio Player Styling */
+        audio {
+            width: 100%;
+            outline: none;
+            margin-top: 10px;
+        }
+
+        .hidden { display: none; }
+
+        /* Links section */
+        .links { margin-top: 15px; font-size: 0.85rem; }
+        .links a { color: #800000; text-decoration: none; margin: 0 5px; }
+        .links a:hover { text-decoration: underline; }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(211, 47, 47, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="player-card">
+        <img id="channelLogo" src="https://via.placeholder.com/120" class="channel-img" alt="Logo">
+
+        <div id="statusContainer">
+            <span class="badge is-offline">Loading...</span>
+        </div>
+
+        <h2 id="channelName">TafseerRaheemi</h2>
+
+        <p id="broadcastTitle">Checking for live stream...</p>
+
+        <audio id="audioPlayer" controls class="hidden">
+            <source src="" type="audio/mpeg">
+            Your browser does not support audio.
+        </audio>
+
+        <div class="links">
+            <a href="http://www.tafseer-raheemi.com" target="_blank">Website</a> •
+            <a href="http://twitter.com/TafseerRaheemi" target="_blank">Twitter</a>
+        </div>
+    </div>
+
+    <script>
+        const CHANNEL_SLUG = 'tafseerraheemi';
+        const API_URL = `https://apicdn.mixlr.com/v3/channel_view/${CHANNEL_SLUG}`;
+
+        async function loadMixlrData() {
+            try {
+                const response = await fetch(API_URL);
+                const json = await response.json();
+
+                // 1. Get Main Channel Data
+                const attributes = json.data.attributes;
+                const isLive = attributes.live; // true or false
+
+                // Update Name & Logo
+                document.getElementById('channelName').innerText = attributes.username;
+
+                // Safe check for logo image
+                if (attributes.media && attributes.media.logo && attributes.media.logo.image) {
+                    document.getElementById('channelLogo').src = attributes.media.logo.image.medium;
+                }
+
+                // 2. Handle Live Status
+                const statusContainer = document.getElementById('statusContainer');
+                const titleEl = document.getElementById('broadcastTitle');
+                const playerEl = document.getElementById('audioPlayer');
+
+                if (isLive) {
+                    // === CHANNEL IS LIVE ===
+                    statusContainer.innerHTML = '<span class="badge is-live">🔴 Live Now</span>';
+
+                    // 3. Find Broadcast Data in "included" array
+                    // We need to find the object where type === 'broadcast'
+                    const broadcastData = json.included.find(item => item.type === 'broadcast');
+
+                    if (broadcastData) {
+                        // Set Title
+                        titleEl.innerText = broadcastData.attributes.title;
+
+                        // Set Audio Stream URL
+                        // Specifically grabbing "progressive_stream_url" from your JSON
+                        const streamUrl = broadcastData.attributes.progressive_stream_url;
+
+                        // Only update src if it's different (prevents reloading if already playing)
+                        if (playerEl.src !== streamUrl) {
+                            playerEl.src = streamUrl;
+                        }
+
+                        playerEl.classList.remove('hidden');
+                    }
+                } else {
+                    // === CHANNEL IS OFFLINE ===
+                    statusContainer.innerHTML = '<span class="badge is-offline">⚪ Offline</span>';
+                    titleEl.innerText = "Stream is currently offline.";
+                    playerEl.classList.add('hidden');
+                    playerEl.pause();
+                }
+
+            } catch (error) {
+                console.error("Error loading Mixlr data:", error);
+                document.getElementById('broadcastTitle').innerText = "Could not load stream info.";
+            }
+        }
+
+        // Run on load
+        loadMixlrData();
+
+        // Check status every 30 seconds
+        setInterval(loadMixlrData, 30000);
+    </script>
+
+</body>
+</html>

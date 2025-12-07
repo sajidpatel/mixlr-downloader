@@ -40,10 +40,19 @@ A powerful terminal-based application for recording multiple Mixlr streams simul
    bun install
    ```
 
-3. Start the application:
+3. Start the TUI recorder:
    ```bash
-   bun start
+   bun run recorder:tui
    ```
+
+### Web interface
+
+Run the web dashboard to start/stop monitoring and trigger AAC→MP3 conversions from the browser:
+
+```bash
+npm install    # or bun install
+npm start      # serves http://localhost:3000
+```
 
 ## 🎛️ Controls
 
