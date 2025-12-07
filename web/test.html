@@ -87,96 +87,122 @@
 </head>
 <body>
 
-    <div class="player-card">
-        <img id="channelLogo" src="https://via.placeholder.com/120" class="channel-img" alt="Logo">
+    <div class="cards">
+      <div id="card-tafseerraheemi" class="player-card">
+        <img id="tafseerraheemi-logo" src="https://via.placeholder.com/120" class="channel-img" alt="Logo">
 
-        <div id="statusContainer">
-            <span class="badge is-offline">Loading...</span>
+        <div id="tafseerraheemi-status" class="status">
+          <span class="badge is-offline">Loading...</span>
         </div>
 
-        <h2 id="channelName">TafseerRaheemi</h2>
+        <h2 id="tafseerraheemi-name">TafseerRaheemi</h2>
+        <p id="tafseerraheemi-title">Checking for live stream...</p>
 
-        <p id="broadcastTitle">Checking for live stream...</p>
-
-        <audio id="audioPlayer" controls class="hidden">
-            <source src="" type="audio/mpeg">
-            Your browser does not support audio.
+        <audio id="tafseerraheemi-player" controls class="hidden">
+          <source src="" type="audio/mpeg">
+          Your browser does not support audio.
         </audio>
 
-        <div class="links">
-            <a href="http://www.tafseer-raheemi.com" target="_blank">Website</a> •
-            <a href="http://twitter.com/TafseerRaheemi" target="_blank">Twitter</a>
+        <div class="links" id="tafseerraheemi-links">
+          <a href="http://www.tafseer-raheemi.com" target="_blank">Website</a> •
+          <a href="http://twitter.com/TafseerRaheemi" target="_blank">Twitter</a>
         </div>
+      </div>
+
+      <div id="card-idauk" class="player-card">
+        <img id="idauk-logo" src="https://via.placeholder.com/120" class="channel-img" alt="Logo">
+
+        <div id="idauk-status" class="status">
+          <span class="badge is-offline">Loading...</span>
+        </div>
+
+        <h2 id="idauk-name">IDA UK</h2>
+        <p id="idauk-title">Checking for live stream...</p>
+
+        <audio id="idauk-player" controls class="hidden">
+          <source src="" type="audio/mpeg">
+          Your browser does not support audio.
+        </audio>
+
+        <div class="links" id="idauk-links">
+          <a href="https://idauk.org" target="_blank">Website</a>
+        </div>
+      </div>
     </div>
 
     <script>
-        const CHANNEL_SLUG = 'tafseerraheemi';
-        const API_URL = `https://apicdn.mixlr.com/v3/channel_view/${CHANNEL_SLUG}`;
+      const CHANNELS = [
+        {
+          slug: 'tafseerraheemi',
+          displayName: 'TafseerRaheemi',
+          linksHtml: `<a href="http://www.tafseer-raheemi.com" target="_blank">Website</a> • <a href="http://twitter.com/TafseerRaheemi" target="_blank">Twitter</a>`,
+        },
+        {
+          slug: 'idauk',
+          displayName: 'IDA UK',
+          linksHtml: `<a href="https://idauk.org" target="_blank">Website</a>`,
+        },
+      ];
 
-        async function loadMixlrData() {
-            try {
-                const response = await fetch(API_URL);
-                const json = await response.json();
+      async function loadMixlrData(channel) {
+        const prefix = channel.slug;
+        const logoEl = document.getElementById(`${prefix}-logo`);
+        const statusEl = document.getElementById(`${prefix}-status`);
+        const nameEl = document.getElementById(`${prefix}-name`);
+        const titleEl = document.getElementById(`${prefix}-title`);
+        const playerEl = document.getElementById(`${prefix}-player`);
+        const linksEl = document.getElementById(`${prefix}-links`);
 
-                // 1. Get Main Channel Data
-                const attributes = json.data.attributes;
-                const isLive = attributes.live; // true or false
+        try {
+          const response = await fetch(`https://apicdn.mixlr.com/v3/channel_view/${channel.slug}`);
+          const json = await response.json();
+          const attributes = json?.data?.attributes || {};
+          const isLive = !!attributes.live;
 
-                // Update Name & Logo
-                document.getElementById('channelName').innerText = attributes.username;
+          nameEl.textContent = attributes.username || channel.displayName || channel.slug;
+          if (attributes.media?.logo?.image?.medium) {
+            logoEl.src = attributes.media.logo.image.medium;
+          }
+          if (linksEl && channel.linksHtml) {
+            linksEl.innerHTML = channel.linksHtml;
+          }
 
-                // Safe check for logo image
-                if (attributes.media && attributes.media.logo && attributes.media.logo.image) {
-                    document.getElementById('channelLogo').src = attributes.media.logo.image.medium;
-                }
-
-                // 2. Handle Live Status
-                const statusContainer = document.getElementById('statusContainer');
-                const titleEl = document.getElementById('broadcastTitle');
-                const playerEl = document.getElementById('audioPlayer');
-
-                if (isLive) {
-                    // === CHANNEL IS LIVE ===
-                    statusContainer.innerHTML = '<span class="badge is-live">🔴 Live Now</span>';
-
-                    // 3. Find Broadcast Data in "included" array
-                    // We need to find the object where type === 'broadcast'
-                    const broadcastData = json.included.find(item => item.type === 'broadcast');
-
-                    if (broadcastData) {
-                        // Set Title
-                        titleEl.innerText = broadcastData.attributes.title;
-
-                        // Set Audio Stream URL
-                        // Specifically grabbing "progressive_stream_url" from your JSON
-                        const streamUrl = broadcastData.attributes.progressive_stream_url;
-
-                        // Only update src if it's different (prevents reloading if already playing)
-                        if (playerEl.src !== streamUrl) {
-                            playerEl.src = streamUrl;
-                        }
-
-                        playerEl.classList.remove('hidden');
-                    }
-                } else {
-                    // === CHANNEL IS OFFLINE ===
-                    statusContainer.innerHTML = '<span class="badge is-offline">⚪ Offline</span>';
-                    titleEl.innerText = "Stream is currently offline.";
-                    playerEl.classList.add('hidden');
-                    playerEl.pause();
-                }
-
-            } catch (error) {
-                console.error("Error loading Mixlr data:", error);
-                document.getElementById('broadcastTitle').innerText = "Could not load stream info.";
+          if (isLive) {
+            statusEl.innerHTML = '<span class="badge is-live">🔴 Live Now</span>';
+            const broadcastData = (json.included || []).find((item) => item.type === 'broadcast');
+            if (broadcastData) {
+              titleEl.textContent = broadcastData.attributes?.title || 'Live now';
+              const streamUrl = broadcastData.attributes?.progressive_stream_url;
+              if (streamUrl && playerEl.src !== streamUrl) {
+                playerEl.src = streamUrl;
+              }
+              playerEl.classList.remove('hidden');
+            } else {
+              titleEl.textContent = 'Live now';
+              playerEl.classList.add('hidden');
             }
+          } else {
+            statusEl.innerHTML = '<span class="badge is-offline">⚪ Offline</span>';
+            titleEl.textContent = 'Stream is currently offline.';
+            playerEl.classList.add('hidden');
+            playerEl.pause();
+          }
+        } catch (err) {
+          console.error(`[${channel.slug}] Error loading Mixlr data:`, err);
+          titleEl.textContent = 'Could not load stream info.';
+          statusEl.innerHTML = '<span class="badge is-offline">⚪ Offline</span>';
+          playerEl.classList.add('hidden');
         }
+      }
 
-        // Run on load
-        loadMixlrData();
+      function startPolling() {
+        CHANNELS.forEach((channel) => {
+          loadMixlrData(channel);
+          setInterval(() => loadMixlrData(channel), 30000);
+        });
+      }
 
-        // Check status every 30 seconds
-        setInterval(loadMixlrData, 30000);
+      startPolling();
     </script>
 
 </body>
