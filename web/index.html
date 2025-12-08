@@ -35,12 +35,12 @@
     </header>
 
     <div class="inline-flex border border-white/10 bg-white/5 rounded-2xl p-1 gap-1">
-      <button class="tab-btn active px-3 py-2 rounded-xl border border-white/10 bg-white/15 font-semibold text-sm" data-tab="control">Control</button>
+      <button class="tab-btn active px-3 py-2 rounded-xl border border-white/10 bg-white/15 font-semibold text-sm" data-tab="library">Library</button>
+      <button class="tab-btn px-3 py-2 rounded-xl border border-transparent text-sm font-semibold text-slate-300" data-tab="control">Control</button>
       <button class="tab-btn px-3 py-2 rounded-xl border border-transparent text-sm font-semibold text-slate-300" data-tab="converter">Converter</button>
-      <button class="tab-btn px-3 py-2 rounded-xl border border-transparent text-sm font-semibold text-slate-300" data-tab="library">Library</button>
     </div>
 
-    <main class="grid gap-4 tab-panel" data-tab-panel="control">
+    <main class="grid gap-4 tab-panel hidden" data-tab-panel="control">
       <section class="bg-slate-900/70 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4">
         <div class="flex items-center justify-between">
           <div>
@@ -123,33 +123,53 @@
 
     <main class="grid gap-4 tab-panel hidden" data-tab-panel="library">
       <section class="bg-slate-900/70 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-start justify-between flex-wrap gap-3">
           <div>
             <p class="uppercase tracking-[0.18em] text-xs text-slate-400">Library</p>
             <h2 class="text-xl font-semibold">Recorded sets</h2>
           </div>
-          <div class="flex flex-wrap gap-2 items-center">
-            <input id="library-search" type="search" placeholder="Search channel, date, file..." class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
-            <select id="library-channel" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
-              <option value="all">All channels</option>
-            </select>
-            <input id="library-from" type="date" class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
-            <input id="library-to" type="date" class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
-            <select id="library-sort" class="hidden sm:inline-block rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
-              <option value="date-desc">Newest first</option>
-              <option value="date-asc">Oldest first</option>
-              <option value="channel-asc">Channel (A→Z)</option>
-              <option value="channel-desc">Channel (Z→A)</option>
-              <option value="duration-desc">Duration (long→short)</option>
-              <option value="duration-asc">Duration (short→long)</option>
-              <option value="size-desc">Size (large→small)</option>
-              <option value="size-asc">Size (small→large)</option>
-              <option value="name-asc">Name (A→Z)</option>
-              <option value="name-desc">Name (Z→A)</option>
-            </select>
-            <button id="library-refresh" class="hidden sm:inline-flex px-3 py-2 rounded-xl border border-sky-400/40 bg-sky-500/15 text-sm font-semibold text-sky-50" type="button">Refresh</button>
-            <button id="library-reset" class="hidden sm:inline-flex px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-sm font-semibold" type="button">Clear</button>
-            <div class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold" id="library-count">—</div>
+          <div class="px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold" id="library-count">—</div>
+        </div>
+
+        <div class="library-filter-bar">
+          <input id="library-search" type="search" placeholder="Search channel, date, file..." class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm flex-1 min-w-[200px]" />
+          <select id="library-channel" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
+            <option value="all">All channels</option>
+          </select>
+          <div class="relative flex flex-col gap-1">
+            <button id="library-range-toggle" type="button" class="w-full text-left rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm flex items-center justify-between gap-2">
+              <span id="library-range-button-label">Pick start and end</span>
+              <svg class="w-4 h-4 text-slate-300" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.152l3.71-3.92a.75.75 0 1 1 1.08 1.04l-4.24 4.48a.75.75 0 0 1-1.08 0l-4.24-4.48a.75.75 0 0 1 .02-1.06Z"></path></svg>
+            </button>
+            <div id="library-range-popover" class="range-popover hidden">
+              <div class="flex flex-col gap-1">
+                <span class="text-xs text-slate-300">Start</span>
+                <input id="library-from" type="date" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <span class="text-xs text-slate-300">End</span>
+                <input id="library-to" type="date" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm" />
+              </div>
+              <div class="flex items-center gap-2 col-span-2 justify-end pt-1">
+                <button id="library-range-clear" type="button" class="px-2 py-2 rounded-full border border-white/15 bg-white/5 text-sm font-semibold text-slate-200" aria-label="Clear date range">×</button>
+              </div>
+            </div>
+          </div>
+          <select id="library-sort" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
+            <option value="date-desc">Newest first</option>
+            <option value="date-asc">Oldest first</option>
+            <option value="channel-asc">Channel (A→Z)</option>
+            <option value="channel-desc">Channel (Z→A)</option>
+            <option value="duration-desc">Duration (long→short)</option>
+            <option value="duration-asc">Duration (short→long)</option>
+            <option value="size-desc">Size (large→small)</option>
+            <option value="size-asc">Size (small→large)</option>
+            <option value="name-asc">Name (A→Z)</option>
+            <option value="name-desc">Name (Z→A)</option>
+          </select>
+          <div class="flex gap-2">
+            <button id="library-refresh" class="px-3 py-2 rounded-xl border border-sky-400/40 bg-sky-500/15 text-sm font-semibold text-sky-50" type="button">Refresh</button>
+            <button id="library-reset" class="px-3 py-2 rounded-xl border border-white/15 bg-white/5 text-sm font-semibold" type="button">Clear</button>
           </div>
         </div>
 

@@ -22,11 +22,17 @@ const libraryChannel = document.getElementById('library-channel');
 const libraryReset = document.getElementById('library-reset');
 const libraryFrom = document.getElementById('library-from');
 const libraryTo = document.getElementById('library-to');
+const libraryRangeToggle = document.getElementById('library-range-toggle');
+const libraryRangePopover = document.getElementById('library-range-popover');
+const libraryRangeClear = document.getElementById('library-range-clear');
+const libraryRangeButtonLabel = document.getElementById('library-range-button-label');
 let libraryItems = [];
 let playCounts = {};
 let libraryIsPlaying = false;
 let playSeenSession = {};
 let libraryHasLoaded = false;
+let libraryLoading = false;
+let selectingRangeStart = true; // legacy flag (unused now)
 const liveHlsMap = new WeakMap();
 const liveMseMap = new WeakMap();
 
@@ -100,6 +106,30 @@ const formatBytes = (bytes) => {
 const formatTime = (iso) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
+};
+
+const formatDateInput = (val) => {
+  if (!val) return null;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+};
+
+const updateRangeLabel = () => {
+  const fromVal = formatDateInput(libraryFrom?.value);
+  const toVal = formatDateInput(libraryTo?.value);
+  if (fromVal && toVal) {
+    const text = `${fromVal} → ${toVal}`;
+    if (libraryRangeButtonLabel) libraryRangeButtonLabel.textContent = text;
+  } else if (fromVal) {
+    const text = `From ${fromVal}`;
+    if (libraryRangeButtonLabel) libraryRangeButtonLabel.textContent = text;
+  } else if (toVal) {
+    const text = `Until ${toVal}`;
+    if (libraryRangeButtonLabel) libraryRangeButtonLabel.textContent = text;
+  } else {
+    if (libraryRangeButtonLabel) libraryRangeButtonLabel.textContent = 'Pick start and end';
+  }
 };
 
 const formatDuration = (seconds) => {
@@ -523,7 +553,49 @@ const sortItems = (items, sortKey) => {
   return sorted;
 };
 
+const renderLibrarySkeleton = (count = 3) => {
+  libraryBody.innerHTML = '';
+  const cards = Array.from({ length: count }).map(() => {
+    const card = document.createElement('div');
+    card.className = 'library-card player-card p-0 shimmer-card';
+    card.innerHTML = `
+      <div class="library-card__glow"></div>
+      <div class="player-card__shimmer"></div>
+      <div class="player-shell">
+        <div class="player-upper">
+          <div class="player-head">
+            <div class="player-meta">
+              <div class="player-cover skeleton-block"></div>
+              <div class="player-text">
+                <div class="player-topline skeleton-line w-28"></div>
+                <div class="player-topline skeleton-line w-36 mt-2"></div>
+              </div>
+            </div>
+          </div>
+          <div class="player-progress skeleton-line w-full h-3 mt-3"></div>
+        </div>
+        <div class="player-divider"></div>
+        <div class="player-bottom">
+          <div class="skeleton-pill w-24 h-10"></div>
+          <div class="player-icon-row">
+            <div class="skeleton-pill w-11 h-11"></div>
+            <div class="skeleton-pill w-11 h-11"></div>
+            <div class="skeleton-pill w-11 h-11"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    return card;
+  });
+  cards.forEach((card) => libraryBody.appendChild(card));
+};
+
 const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 'date-desc', fromDate = '', toDate = '') => {
+  if (libraryLoading) {
+    renderLibrarySkeleton();
+    libraryCount.textContent = '—';
+    return;
+  }
   libraryBody.innerHTML = '';
   const normalized = query.trim().toLowerCase();
   const fromTs = fromDate ? new Date(fromDate).getTime() : null;
@@ -586,7 +658,11 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
               <div class="player-text">
                 <div class="player-topline">
                   <p class="player-kicker">${item.channel || 'Recorded set'}</p>
-                  <span class="badge-pill bg-white/10 border border-white/15 text-[11px] font-semibold play-pill">${plays} play${plays === 1 ? '' : 's'}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="player-icon-btn  bg-white/10 border border-white/15 text-[11px] font-semibold play-pill">${plays}</span>
+                    ${downloadBtn}
+                    ${deleteBtnMarkup}
+                  </div>
                 </div>
                 <h3 class="player-sub">${item.channel || '—'}</h3>
                 <p class="player-subtle">${when} • ${sizeLabel}</p>
@@ -610,8 +686,6 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
             <span class="player-main-btn__icon">${playerIcons.play}</span>
           </button>
           <div class="player-icon-row">
-            ${downloadBtn}
-            ${deleteBtnMarkup}
             <button class="player-icon-btn btn-back" type="button" title="Back 10s">${playerIcons.back}</button>
             <button class="player-icon-btn btn-forward" type="button" title="Forward 15s">${playerIcons.forward}</button>
             <button class="player-icon-btn btn-repeat" type="button" title="Loop">${playerIcons.repeat}</button>
@@ -637,7 +711,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     const deleteBtn = card.querySelector('.btn-delete');
 
     if (playSeenSession[item.url]) {
-      if (playPill) playPill.textContent = `${plays} play${plays === 1 ? '' : 's'}`;
+      if (playPill) playPill.textContent = `${plays}`;
     }
 
     const setState = (playing) => {
@@ -665,7 +739,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
       if (playSeenSession[playKey]) return;
       bumpPlayCount(playKey);
       const updated = playCounts[playKey] || 0;
-      if (playPill) playPill.textContent = `${updated} play${updated === 1 ? '' : 's'}`;
+      if (playPill) playPill.textContent = `${updated}`;
     };
 
     playBtn?.addEventListener('click', () => {
@@ -762,6 +836,8 @@ const loadStatus = async () => {
 const loadLibrary = async ({ skipIfPlaying = false, markLoaded = false } = {}) => {
   if (skipIfPlaying && libraryIsPlaying) return;
   if (markLoaded) libraryHasLoaded = true;
+  libraryLoading = true;
+  renderLibrary();
   try {
     const data = await api('/api/recordings');
     libraryItems = data.items || [];
@@ -769,6 +845,9 @@ const loadLibrary = async ({ skipIfPlaying = false, markLoaded = false } = {}) =
     renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
   } catch (err) {
     showToast(err.message, 'error');
+  } finally {
+    libraryLoading = false;
+    renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
   }
 };
 
@@ -849,7 +928,8 @@ const startPolling = () => {
 loadStatus();
 startPolling();
 loadPlayCounts();
-showTab('control');
+showTab('library');
+updateRangeLabel();
 
 tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => showTab(btn.dataset.tab));
@@ -863,6 +943,40 @@ librarySearch?.addEventListener('input', () => {
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });
 
+const openRangePopover = () => {
+  if (!libraryRangePopover) return;
+  libraryRangePopover.classList.add('open');
+};
+
+const closeRangePopover = () => {
+  if (!libraryRangePopover) return;
+  libraryRangePopover.classList.remove('open');
+};
+
+libraryRangeToggle?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (libraryRangePopover?.classList.contains('open')) {
+    closeRangePopover();
+  } else {
+    openRangePopover();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!libraryRangePopover || !libraryRangeToggle) return;
+  if (!libraryRangePopover.classList.contains('open')) return;
+  if (libraryRangePopover.contains(e.target) || libraryRangeToggle.contains(e.target)) return;
+  closeRangePopover();
+});
+
+libraryRangeClear?.addEventListener('click', () => {
+  if (libraryFrom) libraryFrom.value = '';
+  if (libraryTo) libraryTo.value = '';
+  updateRangeLabel();
+  renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
+  closeRangePopover();
+});
+
 librarySort?.addEventListener('change', () => {
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });
@@ -871,13 +985,25 @@ libraryChannel?.addEventListener('change', () => {
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });
 
-libraryFrom?.addEventListener('change', () => {
+const applyRange = () => {
+  const fromVal = formatDateInput(libraryFrom?.value);
+  const toVal = formatDateInput(libraryTo?.value);
+  let start = fromVal || '';
+  let end = toVal || '';
+  if (start && end && end < start) {
+    [start, end] = [end, start];
+    if (libraryFrom) libraryFrom.value = start;
+    if (libraryTo) libraryTo.value = end;
+  }
+  updateRangeLabel();
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
-});
+  if (start && end) {
+    closeRangePopover();
+  }
+};
 
-libraryTo?.addEventListener('change', () => {
-  renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
-});
+libraryFrom?.addEventListener('change', applyRange);
+libraryTo?.addEventListener('change', applyRange);
 
 libraryReset?.addEventListener('click', () => {
   librarySearch.value = '';
@@ -885,5 +1011,6 @@ libraryReset?.addEventListener('click', () => {
   librarySort.value = 'date-desc';
   if (libraryFrom) libraryFrom.value = '';
   if (libraryTo) libraryTo.value = '';
+  updateRangeLabel();
   renderLibrary(libraryItems, '', 'all', 'date-desc', '', '');
 });
