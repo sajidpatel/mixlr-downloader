@@ -1,0 +1,42 @@
+FROM node:20-slim AS builder
+WORKDIR /app
+
+# Install dependencies (including dev) to build Tailwind assets.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build:css
+
+FROM node:20-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+# ffmpeg/ffprobe + yt-dlp (from Debian repo) required for recording/streaming.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg python3 yt-dlp ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# App code + built assets.
+COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/web ./web
+COPY --from=builder /app/tools ./tools
+COPY --from=builder /app/docs ./docs
+COPY --from=builder /app/README.md ./README.md
+COPY --from=builder /app/LICENSE ./LICENSE
+COPY --from=builder /app/.env.example ./.env.example
+
+# Prepare writable data directories for recordings and HLS segments.
+RUN mkdir -p /app/recordings /app/hls \
+  && chown -R node:node /app
+
+USER node
+EXPOSE 3000
+ENV PORT=3000
+
+VOLUME ["/app/recordings", "/app/hls"]
+
+CMD ["node", "server.js"]
