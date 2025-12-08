@@ -3,12 +3,12 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
-import { createReadStream } from 'fs';
-import { spawn } from 'child_process';
+import { createReadStream, constants as fsConstants } from 'fs';
 import RecorderService from './tools/recorder/recorderService.js';
 import ConverterService from './tools/converter/converterService.js';
 import HlsService from './tools/recorder/hlsService.js';
 import { convertDirectory, formatSummary } from './tools/converter/converter.js';
+import processAdapter from './tools/process/processAdapter.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +29,11 @@ async function resolveWritableDir(preferred, fallback) {
   const tryDir = async (dir) => {
     try {
       await fs.mkdir(dir, { recursive: true });
-      await fs.access(dir);
+      await fs.access(dir, fsConstants.W_OK);
+      // Verify we can create inside the directory.
+      const probe = path.join(dir, '.write-test');
+      await fs.mkdir(probe, { recursive: true });
+      await fs.rm(probe, { recursive: true, force: true });
       return dir;
     } catch (err) {
       if (err.code === 'EACCES' || err.code === 'EPERM') return null;
@@ -57,7 +61,7 @@ const hlsRoot = await resolveWritableDir(
   path.join('/tmp', 'mixlr-hls'),
 );
 
-const recorderService = new RecorderService({ recordingsDir: recordingsRoot });
+const recorderService = new RecorderService({ recordingsDir: recordingsRoot, processAdapter });
 const converterService = new ConverterService({
   convertFn: convertDirectory,
   summaryFn: formatSummary,
@@ -68,6 +72,7 @@ const hlsService = new HlsService({
   hlsRoot,
   idleTimeoutMs: HLS_IDLE_TIMEOUT_MS,
   segmentSeconds: HLS_SEGMENT_SECONDS,
+  processAdapter,
 });
 
 // Start monitoring automatically on boot (skip in tests).
@@ -230,27 +235,36 @@ app.get('/api/stream', async (req, res) => {
 
   if (ext === '.aac') {
     res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
-    const ff = spawn('ffmpeg', [
-      '-hide_banner',
-      '-loglevel', 'warning',
-      '-fflags', '+discardcorrupt',
-      '-err_detect', 'ignore_err',
-      '-i', filePath,
-      '-vn',
-      '-f', 'mp3',
-      '-acodec', 'libmp3lame',
-      '-q:a', '4',
-      '-'
-    ]);
+    const ff = processAdapter.spawnProcess({
+      name: 'ffmpeg:aac-proxy',
+      cmd: 'ffmpeg',
+      args: [
+        '-hide_banner',
+        '-loglevel', 'warning',
+        '-fflags', '+discardcorrupt',
+        '-err_detect', 'ignore_err',
+        '-i', filePath,
+        '-vn',
+        '-f', 'mp3',
+        '-acodec', 'libmp3lame',
+        '-q:a', '4',
+        '-'
+      ],
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeoutMs: null,
+      onStderr: () => {},
+      onExit: ({ code }) => {
+        if (code !== 0 && !res.headersSent) res.status(500).end();
+      },
+    });
     ff.on('error', (err) => {
       console.error('ffmpeg error', err.message);
       if (!res.headersSent) res.status(500).end();
     });
-    ff.stdout.pipe(res);
-    ff.stderr.on('data', () => {}); // keep quiet
-    ff.on('close', (code) => {
-      if (code !== 0 && !res.headersSent) res.status(500).end();
+    req.on('close', () => {
+      try { ff.kill('SIGKILL'); } catch {}
     });
+    ff.stdout?.pipe(res);
   } else {
     serveFileWithRange(req, res, filePath, stats);
   }
@@ -299,18 +313,28 @@ app.get('/api/stream/recording', async (req, res) => {
       ];
 
   res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
-  const ff = spawn('ffmpeg', ffArgs);
+  const ff = processAdapter.spawnProcess({
+    name: 'ffmpeg:recording-stream',
+    cmd: 'ffmpeg',
+    args: ffArgs,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeoutMs: null,
+    onStderr: () => {},
+    onExit: ({ code }) => {
+      if (code !== 0 && !res.headersSent) res.status(500).end();
+    },
+  });
 
   ff.on('error', (err) => {
     console.error('ffmpeg recording stream error', err.message);
     if (!res.headersSent) res.status(500).end();
   });
 
-  ff.stdout.pipe(res);
-  ff.stderr.on('data', () => {});
-  ff.on('close', (code) => {
-    if (code !== 0 && !res.headersSent) res.status(500).end();
+  req.on('close', () => {
+    try { ff.kill('SIGKILL'); } catch {}
   });
+
+  ff.stdout?.pipe(res);
 });
 
 app.use(express.json());
@@ -457,33 +481,43 @@ app.get('/api/live/stream', async (req, res) => {
   if (!live) return res.status(404).json({ error: 'Channel not live' });
 
   res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
-  const ff = spawn('ffmpeg', [
-    '-hide_banner',
-    '-loglevel', 'warning',
-    '-reconnect', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_at_eof', '1',
-    '-reconnect_delay_max', '2',
-    '-fflags', '+discardcorrupt',
-    '-err_detect', 'ignore_err',
-    '-i', live.streamUrl,
-    '-vn',
-    '-f', 'mp3',
-    '-acodec', 'libmp3lame',
-    '-q:a', '4',
-    '-'
-  ]);
+  const ff = processAdapter.spawnProcess({
+    name: `ffmpeg:live-proxy:${channel}`,
+    cmd: 'ffmpeg',
+    args: [
+      '-hide_banner',
+      '-loglevel', 'warning',
+      '-reconnect', '1',
+      '-reconnect_streamed', '1',
+      '-reconnect_at_eof', '1',
+      '-reconnect_delay_max', '2',
+      '-fflags', '+discardcorrupt',
+      '-err_detect', 'ignore_err',
+      '-i', live.streamUrl,
+      '-vn',
+      '-f', 'mp3',
+      '-acodec', 'libmp3lame',
+      '-q:a', '4',
+      '-'
+    ],
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeoutMs: null,
+    onStderr: () => {},
+    onExit: ({ code }) => {
+      if (code !== 0 && !res.headersSent) res.status(500).end();
+    },
+  });
 
   ff.on('error', (err) => {
     console.error('ffmpeg live error', err.message);
     if (!res.headersSent) res.status(500).end();
   });
 
-  ff.stdout.pipe(res);
-  ff.stderr.on('data', () => {});
-  ff.on('close', (code) => {
-    if (code !== 0 && !res.headersSent) res.status(500).end();
+  req.on('close', () => {
+    try { ff.kill('SIGKILL'); } catch {}
   });
+
+  ff.stdout?.pipe(res);
 });
 
 app.get('/api/live/hls/:channel', async (req, res) => {

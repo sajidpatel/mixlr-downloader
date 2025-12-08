@@ -1,6 +1,6 @@
-import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
+import processAdapter from '../process/processAdapter.js';
 
 class HlsService {
   constructor({
@@ -8,11 +8,13 @@ class HlsService {
     hlsRoot,
     idleTimeoutMs = 10 * 60 * 1000,
     segmentSeconds = 4,
+    processAdapter: adapter = processAdapter,
   } = {}) {
     this.recorderService = recorderService;
     this.hlsRoot = hlsRoot;
     this.idleTimeoutMs = idleTimeoutMs;
     this.segmentSeconds = segmentSeconds;
+    this.processAdapter = adapter;
     this.sessions = new Map();
   }
 
@@ -54,7 +56,13 @@ class HlsService {
       playlistFile,
     ];
 
-    const proc = spawn('ffmpeg', args, { stdio: 'ignore' });
+    const proc = this.processAdapter.spawnProcess({
+      name: `ffmpeg:hls:${normalized}`,
+      cmd: 'ffmpeg',
+      args,
+      stdio: 'ignore',
+      timeoutMs: null,
+    });
 
     const session = {
       channel: normalized,

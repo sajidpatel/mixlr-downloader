@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import { constants } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import processAdapter from '../process/processAdapter.js';
 
 async function commandExists(cmd) {
   return new Promise((resolve) => {
@@ -48,27 +49,26 @@ async function fileExists(filePath) {
   }
 }
 
-async function convertFile(inputFile, outputFile) {
-  return new Promise((resolve, reject) => {
-    const args = [
-      '-hide_banner',
-      '-loglevel', 'warning',
-      '-fflags', '+discardcorrupt',
-      '-err_detect', 'ignore_err',
-      '-y',
-      '-i', inputFile,
-      '-vn',
-      '-acodec', 'libmp3lame',
-      '-q:a', '2',
-      outputFile,
-    ];
+async function convertFile(inputFile, outputFile, { processAdapterInstance = processAdapter } = {}) {
+  const args = [
+    '-hide_banner',
+    '-loglevel', 'warning',
+    '-fflags', '+discardcorrupt',
+    '-err_detect', 'ignore_err',
+    '-y',
+    '-i', inputFile,
+    '-vn',
+    '-acodec', 'libmp3lame',
+    '-q:a', '2',
+    outputFile,
+  ];
 
-    const proc = spawn('ffmpeg', args, { stdio: 'inherit' });
-    proc.on('error', reject);
-    proc.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`ffmpeg exited with code ${code}`));
-    });
+  await processAdapterInstance.runProcess({
+    name: 'ffmpeg:convert',
+    cmd: 'ffmpeg',
+    args,
+    stdio: 'inherit',
+    timeoutMs: 10 * 60 * 1000,
   });
 }
 

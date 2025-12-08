@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { mkdir, readdir, stat, unlink } from 'fs/promises';
 import path from 'path';
 import fetch from 'node-fetch';
+import processAdapter from '../process/processAdapter.js';
 
 const API_BASE_URL = 'https://apicdn.mixlr.com/v3/channel_view/';
 
@@ -94,6 +95,7 @@ export class RecorderService {
     this.intervals = [];
     this.isMonitoring = false;
     this.logger = options.logger ?? console;
+    this.processAdapter = options.processAdapter || processAdapter;
     this.mediaCache = new Map();
     this.mediaPrimed = false;
   }
@@ -370,7 +372,32 @@ export class RecorderService {
     await mkdir(stageDir, { recursive: true });
     this.log(`[${stage}] Starting recording...`);
 
-    const ytdlp = spawn('yt-dlp', ['--no-part', '-f', 'bestaudio', '--extract-audio', '--audio-format', 'mp3', '--live-from-start', '-o', outputPath, streamUrl], { stdio: 'pipe' });
+    const ytdlp = this.processAdapter.spawnProcess({
+      name: `yt-dlp:${stage}`,
+      cmd: 'yt-dlp',
+      args: ['--no-part', '-f', 'bestaudio', '--extract-audio', '--audio-format', 'mp3', '--live-from-start', '-o', outputPath, streamUrl],
+      stdio: ['ignore', 'ignore', 'pipe'],
+      timeoutMs: null, // recordings can be long-lived
+      onStderr: (data) => {
+        const message = data.toString().trim();
+        if (message.toLowerCase().includes('error')) {
+          this.error(`[${stage}] yt-dlp: ${message}`);
+        }
+      },
+      onExit: ({ code }) => {
+        this.log(`[${stage}] Recording finished (code ${code}).`);
+        if (code === 0) {
+          const { dir, name } = path.parse(outputPath);
+          const aacPath = path.join(dir, `${name}.aac`);
+          unlink(aacPath).then(() => {
+            this.log(`[${stage}] Removed source AAC file (${aacPath}).`);
+          }).catch((error) => {
+            if (error.code !== 'ENOENT') this.warn(`[${stage}] Could not remove AAC file (${aacPath}): ${error.message}`);
+          });
+        }
+        this.runningProcesses.delete(stage);
+      },
+    });
 
     const info = {
       process: ytdlp,
@@ -386,33 +413,6 @@ export class RecorderService {
     };
 
     this.runningProcesses.set(stage, info);
-
-    ytdlp.stderr.on('data', (data) => {
-      const message = data.toString().trim();
-      if (message.toLowerCase().includes('error')) {
-        this.error(`[${stage}] yt-dlp: ${message}`);
-      }
-    });
-
-    ytdlp.on('close', async (code) => {
-      this.log(`[${stage}] Recording finished (code ${code}).`);
-      if (code === 0) {
-        const { dir, name } = path.parse(outputPath);
-        const aacPath = path.join(dir, `${name}.aac`);
-        try {
-          await unlink(aacPath);
-          this.log(`[${stage}] Removed source AAC file (${aacPath}).`);
-        } catch (error) {
-          if (error.code !== 'ENOENT') this.warn(`[${stage}] Could not remove AAC file (${aacPath}): ${error.message}`);
-        }
-      }
-      this.runningProcesses.delete(stage);
-    });
-
-    ytdlp.on('error', (err) => {
-      this.error(`[${stage}] Failed to start yt-dlp: ${err.message}`);
-      this.runningProcesses.delete(stage);
-    });
 
     return { started: true, stage, fileName, path: outputPath };
   }
