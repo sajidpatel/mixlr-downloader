@@ -164,9 +164,10 @@ const playerIcons = {
   pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"></path></svg>',
   back: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6.5 5v14"></path><path d="M18 5 9 12l9 7V5Z" fill="currentColor"></path></svg>',
   forward: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17.5 5v14"></path><path d="m6 5 9 7-9 7V5Z" fill="currentColor"></path></svg>',
-  repeat: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7H5a3 3 0 0 0-3 3v1.5"></path><path d="M7 10H5a3 3 0 0 0-3 3v1.5"></path><path d="M6 17H5l-2.5-2.5L5 12h1"></path><path d="M18 17h1a3 3 0 0 0 3-3v-1.5"></path><path d="M17 14h2a3 3 0 0 0 3-3V9.5"></path><path d="M18 7h1l2.5 2.5L19 12h-1"></path></svg>',
+  repeat: '<svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16 4 3 3H5v3m3 10-3-3h14v-3m-9-2.5 2-1.5v4"/></svg>',
   queue: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 19h14"></path></svg>',
+  trash: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12c0 .6.4 1 1 1h8c.6 0 1-.4 1-1l1-12"></path><path d="M9 7V5c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v2"></path></svg>',
 };
 
 const loadPlayCounts = () => {
@@ -562,6 +563,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     const plays = playCounts[playKey] || 0;
     const sizeLabel = formatSize(item.size);
     const displayName = item.file || 'Recording';
+    const itemPath = item.path || item.relativePath || null;
     const initial = (item.channel || displayName).slice(0, 1).toUpperCase();
     const artwork = item.cover || item.artwork || item.thumbnail;
     const downloadUrl = item.downloadUrl || item.url || null;
@@ -571,6 +573,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     const downloadBtn = downloadUrl
       ? `<a class="player-icon-btn btn-download" href="${downloadUrl}" download title="Download">${playerIcons.download}</a>`
       : '';
+    const deleteBtnMarkup = itemPath ? `<button class="player-icon-btn btn-delete" type="button" title="Delete recording">${playerIcons.trash}</button>` : '';
 
     card.innerHTML = `
       <div class="library-card__glow"></div>
@@ -608,6 +611,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
           </button>
           <div class="player-icon-row">
             ${downloadBtn}
+            ${deleteBtnMarkup}
             <button class="player-icon-btn btn-back" type="button" title="Back 10s">${playerIcons.back}</button>
             <button class="player-icon-btn btn-forward" type="button" title="Forward 15s">${playerIcons.forward}</button>
             <button class="player-icon-btn btn-repeat" type="button" title="Loop">${playerIcons.repeat}</button>
@@ -630,6 +634,7 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     const backBtn = card.querySelector('.btn-back');
     const forwardBtn = card.querySelector('.btn-forward');
     const repeatBtn = card.querySelector('.btn-repeat');
+    const deleteBtn = card.querySelector('.btn-delete');
 
     if (playSeenSession[item.url]) {
       if (playPill) playPill.textContent = `${plays} play${plays === 1 ? '' : 's'}`;
@@ -702,6 +707,24 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     repeatBtn?.addEventListener('click', () => {
       repeatBtn.classList.toggle('active');
       audio.loop = repeatBtn.classList.contains('active');
+    });
+
+    deleteBtn?.addEventListener('click', async () => {
+      if (!itemPath) return showToast('Missing file path', 'error');
+      const confirmDelete = window.confirm(`Delete ${displayName}? This cannot be undone.`);
+      if (!confirmDelete) return;
+      deleteBtn.disabled = true;
+      try {
+        await api('/api/recordings', { method: 'DELETE', body: JSON.stringify({ path: itemPath }) });
+        audio.pause();
+        libraryItems = libraryItems.filter((libItem) => (libItem.path || libItem.relativePath) !== itemPath);
+        renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
+        showToast('Recording deleted');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        deleteBtn.disabled = false;
+      }
     });
 
     audio.addEventListener('loadedmetadata', updateProgress);

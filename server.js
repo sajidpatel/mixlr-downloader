@@ -147,6 +147,7 @@ async function listRecordingsFlat(rootDir, { getMediaForChannel } = {}) {
       items.push({
         channel: entry.name,
         file: file.name,
+        path: relativePath,
         url: `/api/stream?path=${encodeURIComponent(relativePath)}&follow=1`,
         downloadUrl: `/recordings/${entry.name}/${encodeURIComponent(file.name)}`,
         size: stats.size,
@@ -658,6 +659,36 @@ app.get('/api/recordings', async (_req, res) => {
     });
     res.json({ items });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/recordings', async (req, res) => {
+  const relPath = req.body?.path;
+  if (!relPath) return res.status(400).json({ error: 'path is required' });
+
+  let filePath;
+  try {
+    filePath = resolveRecordingPath(relPath);
+  } catch (err) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+
+  try {
+    const stats = await fs.stat(filePath);
+    if (!stats.isFile()) {
+      return res.status(400).json({ error: 'Not a file' });
+    }
+    await fs.unlink(filePath);
+    // Attempt to clean up empty channel directory; ignore errors.
+    const dir = path.dirname(filePath);
+    try {
+      const remaining = await fs.readdir(dir);
+      if (!remaining.length) await fs.rmdir(dir);
+    } catch {}
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
     res.status(500).json({ error: err.message });
   }
 });
