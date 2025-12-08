@@ -11,7 +11,7 @@
     "build:css": "tailwindcss -i ./web/src/tailwind.css -o ./web/dist/tailwind.css --minify",
     "dev:css": "tailwindcss -i ./web/src/tailwind.css -o ./web/dist/tailwind.css --watch",
     "watch:tailwind": "tailwindcss -i ./web/src/tailwind.css -o ./web/dist/tailwind.css --watch",
-    "test": "node --test"
+    "test": "NODE_ENV=test node --test"
   },
   "dependencies": {
     "blessed": "^0.1.81",

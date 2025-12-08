@@ -18,8 +18,10 @@ const webRoot = path.join(__dirname, 'web');
 const recordingsRoot = path.join(__dirname, 'recordings');
 const hlsRoot = path.join(__dirname, 'hls');
 
-// Start monitoring automatically on boot.
-recorderService.startMonitoring();
+// Start monitoring automatically on boot (skip in tests).
+if (process.env.NODE_ENV !== 'test') {
+  recorderService.startMonitoring();
+}
 
 const MAX_PORT_ATTEMPTS = 50; // safety cap to avoid infinite loops
 const FOLLOW_IDLE_TIMEOUT_MS = 300_000; // 5 minutes idle before closing a follow stream
@@ -28,6 +30,14 @@ const HLS_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 const HLS_SEGMENT_SECONDS = 4;
 
 const hlsSessions = new Map();
+
+let convertDirectoryFn = convertDirectory;
+let formatSummaryFn = formatSummary;
+
+export function __setConverterFns({ convert, summary } = {}) {
+  if (convert) convertDirectoryFn = convert;
+  if (summary) formatSummaryFn = summary;
+}
 
 async function listRecordings(rootDir) {
   const results = {};
@@ -551,9 +561,8 @@ app.use(express.json());
 app.use(express.static(webRoot));
 app.use('/live', express.static(hlsRoot));
 
-app.get('/api/status', async (_req, res) => {
-  res.set('Cache-Control', 'no-store');
-  const runningRaw = await recorderService.getRunning();
+export async function buildStatusPayload(recSvc) {
+  const runningRaw = await recSvc.getRunning();
   const running = runningRaw.map((item) => {
     // Normalize to an absolute path before computing a safe relative path.
     const absPath = path.isAbsolute(item.path) ? item.path : path.resolve(process.cwd(), item.path);
@@ -576,7 +585,7 @@ app.get('/api/status', async (_req, res) => {
     });
   });
 
-  const liveRaw = await recorderService.listLiveStreams();
+  const liveRaw = await recSvc.listLiveStreams();
   const live = (liveRaw || []).map((item) => {
     const key = (item.stage || item.channel || '').toLowerCase();
     const match = key ? runningLookup.get(key) : null;
@@ -594,11 +603,22 @@ app.get('/api/status', async (_req, res) => {
       themeColor,
     };
   });
-  res.json({
-    recorder: { ...recorderService.getStatus(), running },
+
+  return {
+    recorder: { ...recSvc.getStatus(), running },
     converter: lastConversion,
     live,
-  });
+  };
+}
+
+app.get('/api/status', async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const payload = await buildStatusPayload(recorderService);
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/recorder/running', async (_req, res) => {
@@ -622,11 +642,16 @@ app.post('/api/recorder/refresh', async (_req, res) => {
   res.json({ results, status: recorderService.getStatus() });
 });
 
+export async function handleRecorderStart(recSvc, body) {
+  const { channel } = body || {};
+  if (!channel) return { status: 400, payload: { error: 'channel is required' } };
+  const result = await recSvc.startChannel(channel);
+  return { status: 200, payload: result };
+}
+
 app.post('/api/recorder/start', async (req, res) => {
-  const { channel } = req.body || {};
-  if (!channel) return res.status(400).json({ error: 'channel is required' });
-  const result = await recorderService.startChannel(channel);
-  res.json(result);
+  const { status, payload } = await handleRecorderStart(recorderService, req.body);
+  res.status(status).json(payload);
 });
 
 app.post('/api/recorder/stop', async (req, res) => {
@@ -641,12 +666,18 @@ app.post('/api/recorder/stop-all', async (_req, res) => {
   res.json({ stopped: true });
 });
 
+export async function handleConverterRun(body, { onSummary } = {}) {
+  const { inputDir = 'recordings', deleteSource = false } = body || {};
+  const summary = await convertDirectoryFn({ inputDir, deleteSource, onLog: console.log });
+  const enriched = { ...summary, inputDir, ranAt: new Date().toISOString(), summaryText: formatSummaryFn(summary) };
+  if (typeof onSummary === 'function') onSummary(enriched);
+  return { status: 200, payload: { ok: true, summary: enriched } };
+}
+
 app.post('/api/converter/run', async (req, res) => {
-  const { inputDir = 'recordings', deleteSource = false } = req.body || {};
   try {
-    const summary = await convertDirectory({ inputDir, deleteSource, onLog: console.log });
-    lastConversion = { ...summary, inputDir, ranAt: new Date().toISOString(), summaryText: formatSummary(summary) };
-    res.json({ ok: true, summary: lastConversion });
+    const { status, payload } = await handleConverterRun(req.body, { onSummary: (summary) => { lastConversion = summary; } });
+    res.status(status).json(payload);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -776,7 +807,7 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(webRoot, 'index.html'));
 });
 
-function startServer(port, attempt = 0) {
+export function startServer(port = PORT, attempt = 0) {
   const server = app
     .listen(port, () => {
       console.log(`Web UI available at http://localhost:${port}`);
@@ -799,4 +830,8 @@ function startServer(port, attempt = 0) {
   return server;
 }
 
-startServer(PORT);
+if (process.env.NODE_ENV !== 'test') {
+  startServer(PORT);
+}
+
+export { app, recorderService };
