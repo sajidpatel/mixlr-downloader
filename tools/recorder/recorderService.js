@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import { mkdir, stat, unlink } from 'fs/promises';
+import { mkdir, readdir, stat, unlink } from 'fs/promises';
 import path from 'path';
 import fetch from 'node-fetch';
 
@@ -20,6 +20,69 @@ export const DEFAULT_CHANNELS = [
 
 const safeFetch = (...args) => (globalThis.fetch ? globalThis.fetch(...args) : fetch(...args));
 
+function normalizeRoot(rootDir) {
+  return path.resolve(rootDir || '.');
+}
+
+function parseDateFromFilename(fileName) {
+  const match = fileName.match(/_(\d{4}-\d{2}-\d{2}T[\d.-]+)\./);
+  if (!match) return null;
+  const normalized = match[1].replace(
+    /T(\d{2})-(\d{2})-(\d{2})(\.\d+)?Z?/,
+    (_m, h, m, s, frac = '') => `T${h}:${m}:${s}${frac}Z`,
+  );
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+async function probeDurationSeconds(filePath) {
+  return new Promise((resolve) => {
+    const proc = spawn('ffprobe', ['-v', 'quiet', '-of', 'csv=p=0', '-show_entries', 'format=duration', filePath]);
+    let output = '';
+    proc.stdout.on('data', (d) => {
+      output += d.toString();
+    });
+    proc.on('error', () => resolve(null));
+    proc.on('close', () => {
+      const seconds = parseFloat(output.trim());
+      if (Number.isFinite(seconds)) resolve(seconds);
+      else resolve(null);
+    });
+  });
+}
+
+function buildSafeRel(recordingsRoot, absPath) {
+  const rel = path.relative(recordingsRoot, absPath);
+  const safeRel = rel.split(path.sep).map(encodeURIComponent).join('/');
+  const isSafe = rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return isSafe ? safeRel : null;
+}
+
+function normalizedExt(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.part') {
+    const withoutPart = filePath.slice(0, -ext.length);
+    return path.extname(withoutPart).toLowerCase();
+  }
+  return ext;
+}
+
+function contentTypeFor(filePath) {
+  const ext = normalizedExt(filePath);
+  switch (ext) {
+    case '.mp3':
+      return 'audio/mpeg';
+    case '.aac':
+      return 'audio/aac';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.webm':
+      return 'audio/webm';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
 export class RecorderService {
   constructor(options = {}) {
     this.channels = options.channels ?? DEFAULT_CHANNELS;
@@ -33,6 +96,10 @@ export class RecorderService {
     this.logger = options.logger ?? console;
     this.mediaCache = new Map();
     this.mediaPrimed = false;
+  }
+
+  getRecordingsRoot() {
+    return normalizeRoot(this.recordingsDir);
   }
 
   async primeMediaCache() {
@@ -106,6 +173,25 @@ export class RecorderService {
 
   async ensureRecordingDir() {
     await mkdir(this.recordingsDir, { recursive: true });
+  }
+
+  resolveRecordingPath(relPath) {
+    const decoded = decodeURIComponent(relPath || '');
+    const normalized = path.normalize(decoded);
+    const root = this.getRecordingsRoot();
+    const filePath = path.join(root, normalized);
+    if (!filePath.startsWith(root)) {
+      throw new Error('Invalid path');
+    }
+    return filePath;
+  }
+
+  normalizedExt(filePath) {
+    return normalizedExt(filePath);
+  }
+
+  contentTypeFor(filePath) {
+    return contentTypeFor(filePath);
   }
 
   async getChannelMedia(channel) {
@@ -500,6 +586,131 @@ export class RecorderService {
       });
     }
     return running;
+  }
+
+  async listRecordingsFlat({ rootDir = this.getRecordingsRoot(), getMediaForChannel } = {}) {
+    const items = [];
+    const mediaCache = new Map();
+    let entries;
+    try {
+      entries = await readdir(rootDir, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === 'ENOENT') return items;
+      throw err;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const channelDir = path.join(rootDir, entry.name);
+      const channel = entry.name;
+      let channelMedia = null;
+      if (typeof getMediaForChannel === 'function') {
+        if (mediaCache.has(channel)) {
+          channelMedia = mediaCache.get(channel);
+        } else {
+          try {
+            channelMedia = await getMediaForChannel(channel);
+          } catch (err) {
+            this.warn(`channel media lookup failed for ${channel}: ${err.message}`);
+            channelMedia = null;
+          }
+          mediaCache.set(channel, channelMedia);
+        }
+      }
+      let files;
+      try {
+        files = await readdir(channelDir, { withFileTypes: true });
+      } catch (err) {
+        if (err.code === 'ENOENT') continue;
+        throw err;
+      }
+
+      for (const file of files) {
+        if (!file.isFile() || !/\.(mp3|aac|m4a|webm)$/i.test(file.name)) continue;
+        const abs = path.join(channelDir, file.name);
+        let stats;
+        try {
+          stats = await stat(abs);
+        } catch {
+          continue;
+        }
+
+        const dateGuess = parseDateFromFilename(file.name) || stats.mtime.toISOString();
+        const duration = await probeDurationSeconds(abs);
+
+        const relativePath = path.relative(rootDir, abs);
+        const artwork = channelMedia?.artwork || null;
+        const logo = channelMedia?.logo || null;
+        const cover = artwork || logo || null;
+        items.push({
+          channel: entry.name,
+          file: file.name,
+          path: relativePath,
+          url: `/api/stream?path=${encodeURIComponent(relativePath)}&follow=1`,
+          downloadUrl: `/recordings/${entry.name}/${encodeURIComponent(file.name)}`,
+          size: stats.size,
+          mtime: stats.mtime.toISOString(),
+          date: dateGuess,
+          duration,
+          artwork: artwork || null,
+          cover,
+          logo,
+          themeColor: channelMedia?.themeColor || null,
+        });
+      }
+    }
+
+    items.sort((a, b) => new Date(b.mtime).getTime() - new Date(a.mtime).getTime());
+    return items;
+  }
+
+  async buildStatusPayload({ recordingsRoot = this.getRecordingsRoot() } = {}) {
+    const runningRaw = await this.getRunning();
+    const root = normalizeRoot(recordingsRoot);
+    const running = runningRaw.map((item) => {
+      const absPath = path.isAbsolute(item.path) ? item.path : path.join(root, item.path);
+      const safeRel = buildSafeRel(root, absPath);
+      const followParam = '&follow=1';
+      const liveParam = item.sourceUrl ? `&live=${encodeURIComponent(item.sourceUrl)}` : '';
+      return {
+        ...item,
+        path: absPath,
+        streamUrl: safeRel ? `/api/stream?path=${safeRel}${followParam}` : null,
+        downloadUrl: safeRel ? `/recordings/${safeRel}` : null,
+        streamProxy: safeRel ? `/api/stream/recording?path=${safeRel}${liveParam}${followParam}` : null,
+      };
+    });
+    const runningLookup = new Map();
+    running.forEach((item) => {
+      const keys = [item.stage, item.channel].filter(Boolean).map((k) => k.toLowerCase());
+      keys.forEach((key) => {
+        if (!runningLookup.has(key)) runningLookup.set(key, item);
+      });
+    });
+
+    const liveRaw = await this.listLiveStreams();
+    const live = (liveRaw || []).map((item) => {
+      const key = (item.stage || item.channel || '').toLowerCase();
+      const match = key ? runningLookup.get(key) : null;
+      const streamProxy = match?.streamProxy || null;
+      const logo = item.logo || match?.logo || null;
+      const artwork = item.artwork || item.cover || null;
+      const themeColor = item.themeColor || null;
+      return {
+        ...item,
+        streamProxy,
+        source: streamProxy ? 'local-recording' : 'live-stream',
+        title: item.title || item.name || match?.fileName || item.stage || item.channel || 'Live stream',
+        logo,
+        artwork,
+        themeColor,
+      };
+    });
+
+    return {
+      recorder: { ...this.getStatus(), running },
+      live,
+    };
   }
 
   getStatus() {
