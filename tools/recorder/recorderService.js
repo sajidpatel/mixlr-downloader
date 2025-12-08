@@ -147,6 +147,8 @@ export class RecorderService {
       path.join(dir, `${name}.m4a.part`),
       path.join(dir, `${name}.mp4`),
       path.join(dir, `${name}.mp4.part`),
+      path.join(dir, `${name}.unknown_video`),
+      path.join(dir, `${name}.unknown_video.part`),
     ];
 
     for (const candidate of candidates) {

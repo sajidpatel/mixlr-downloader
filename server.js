@@ -84,6 +84,20 @@ function isTruthy(val) {
   return val === true || val === '1' || (typeof val === 'string' && val.toLowerCase() === 'true');
 }
 
+function buildAltRelPath(relPath) {
+  if (!relPath) return null;
+  const replacements = [
+    [/\.aac(\.part)?$/i, '.unknown_video$1'],
+    [/\.mp3(\.part)?$/i, '.unknown_video$1'],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    if (pattern.test(relPath)) {
+      return relPath.replace(pattern, replacement);
+    }
+  }
+  return null;
+}
+
 async function streamGrowingFile(req, res, filePath) {
   let position = 0;
   let aborted = false;
@@ -213,18 +227,27 @@ app.get('/api/stream', async (req, res) => {
   if (!relPath) return res.status(400).json({ error: 'path is required' });
 
   let filePath;
-  try {
-    filePath = recorderService.resolveRecordingPath(relPath);
-  } catch (err) {
-    return res.status(400).json({ error: 'Invalid path' });
-  }
-
   let stats;
   try {
+    filePath = recorderService.resolveRecordingPath(relPath);
     stats = await fs.stat(filePath);
   } catch (err) {
-    if (err.code === 'ENOENT') return res.status(404).end();
-    return res.status(500).json({ error: err.message });
+    if (err.code === 'ENOENT') {
+      const altRel = buildAltRelPath(relPath);
+      if (altRel) {
+        try {
+          filePath = recorderService.resolveRecordingPath(altRel);
+          stats = await fs.stat(filePath);
+        } catch (altErr) {
+          if (altErr.code === 'ENOENT') return res.status(404).end();
+          return res.status(500).json({ error: altErr.message });
+        }
+      } else {
+        return res.status(404).end();
+      }
+    } else {
+      return res.status(400).json({ error: 'Invalid path' });
+    }
   }
 
   const follow = isTruthy(req.query.follow);
@@ -275,18 +298,27 @@ app.get('/api/stream/recording', async (req, res) => {
   if (!relPath) return res.status(400).json({ error: 'path is required' });
 
   let filePath;
-  try {
-    filePath = recorderService.resolveRecordingPath(relPath);
-  } catch (err) {
-    return res.status(400).json({ error: 'Invalid path' });
-  }
-
   let stats;
   try {
+    filePath = recorderService.resolveRecordingPath(relPath);
     stats = await fs.stat(filePath);
   } catch (err) {
-    if (err.code === 'ENOENT') return res.status(404).end();
-    return res.status(500).json({ error: err.message });
+    if (err.code === 'ENOENT') {
+      const altRel = buildAltRelPath(relPath);
+      if (altRel) {
+        try {
+          filePath = recorderService.resolveRecordingPath(altRel);
+          stats = await fs.stat(filePath);
+        } catch (altErr) {
+          if (altErr.code === 'ENOENT') return res.status(404).end();
+          return res.status(500).json({ error: altErr.message });
+        }
+      } else {
+        return res.status(404).end();
+      }
+    } else {
+      return res.status(400).json({ error: 'Invalid path' });
+    }
   }
 
   const useLive = live && typeof live === 'string';
