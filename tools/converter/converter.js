@@ -72,8 +72,14 @@ async function convertFile(inputFile, outputFile) {
   });
 }
 
-export async function convertDirectory({ inputDir = 'recordings', deleteSource = false, onLog = console.log } = {}) {
-  if (!await commandExists('ffmpeg')) {
+export async function convertDirectory({
+  inputDir = 'recordings',
+  deleteSource = false,
+  onLog = console.log,
+  commandExistsFn = commandExists,
+  convertFileFn = convertFile,
+} = {}) {
+  if (!await commandExistsFn('ffmpeg')) {
     throw new Error('ffmpeg is required but was not found in PATH.');
   }
 
@@ -102,7 +108,7 @@ export async function convertDirectory({ inputDir = 'recordings', deleteSource =
 
     onLog(`Converting: ${file} -> ${outputFile}`);
     try {
-      await convertFile(file, outputFile);
+      await convertFileFn(file, outputFile);
       converted += 1;
       if (deleteSource) {
         await fs.unlink(file);

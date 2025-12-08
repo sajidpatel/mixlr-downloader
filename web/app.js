@@ -115,6 +115,8 @@ const formatDateInput = (val) => {
   return d.toISOString().slice(0, 10);
 };
 
+const escapeAttr = (value = '') => String(value).replace(/"/g, '&quot;');
+
 const updateRangeLabel = () => {
   const fromVal = formatDateInput(libraryFrom?.value);
   const toVal = formatDateInput(libraryTo?.value);
@@ -643,9 +645,11 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
       ? `<img src="${artwork}" alt="Cover art for ${displayName}" loading="lazy" class="player-cover__img" />`
       : `<div class="player-cover__fallback">${initial}</div>`;
     const downloadBtn = downloadUrl
-      ? `<a class="player-icon-btn btn-download" href="${downloadUrl}" download title="Download">${playerIcons.download}</a>`
+      ? `<a class="player-icon-btn btn-download" href="${downloadUrl}" download title="Download" aria-label="Download ${escapeAttr(displayName)}">${playerIcons.download}</a>`
       : '';
-    const deleteBtnMarkup = itemPath ? `<button class="player-icon-btn btn-delete" type="button" title="Delete recording">${playerIcons.trash}</button>` : '';
+    const deleteBtnMarkup = itemPath
+      ? `<button class="player-icon-btn btn-delete" type="button" title="Delete recording" aria-label="Delete ${escapeAttr(displayName)}">${playerIcons.trash}</button>`
+      : '';
 
     card.innerHTML = `
       <div class="library-card__glow"></div>
@@ -686,8 +690,8 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
             <span class="player-main-btn__icon">${playerIcons.play}</span>
           </button>
           <div class="player-icon-row">
-            <button class="player-icon-btn btn-back" type="button" title="Back 10s">${playerIcons.back}</button>
-            <button class="player-icon-btn btn-forward" type="button" title="Forward 15s">${playerIcons.forward}</button>
+            <button class="player-icon-btn btn-back" type="button" title="Back 10s" aria-label="Skip back 10 seconds">${playerIcons.back}</button>
+            <button class="player-icon-btn btn-forward" type="button" title="Forward 15s" aria-label="Skip forward 15 seconds">${playerIcons.forward}</button>
             <button class="player-icon-btn btn-repeat" type="button" title="Loop">${playerIcons.repeat}</button>
           </div>
         </div>
