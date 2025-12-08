@@ -287,14 +287,14 @@ export class RecorderService {
     const attr = broadcast.attributes || {};
     const streams = broadcast.streams || attr.streams || attr.stream || {};
     const candidates = [
+      attr?.progressive_stream_url,
+      broadcast.progressive_stream_url,
       streams?.mp3?.url,
       streams?.mp3,
       streams?.http_mp3_stream,
       streams?.http_stream,
       streams?.hls?.mp3?.url,
       streams?.hls?.url,
-      attr?.progressive_stream_url,
-      broadcast.progressive_stream_url,
     ];
     return candidates.find((url) => typeof url === 'string' && url.length > 0) || null;
   }
@@ -354,6 +354,22 @@ export class RecorderService {
     const attrCurrent = data?.data?.attributes?.current_broadcast;
     if (attrCurrent) {
       const resolved = fromBroadcast(attrCurrent);
+      if (resolved) return resolved;
+    }
+
+    // Some payloads use public_current_broadcasts
+    const publicRel = data?.data?.relationships?.public_current_broadcasts?.data;
+    if (publicRel && Array.isArray(data.included)) {
+      const broadcast = data.included.find((item) => item.type === 'broadcast' && item.id === publicRel[0]?.id)
+        || data.included.find((item) => item.type === 'broadcast');
+      const resolved = fromBroadcast(broadcast);
+      if (resolved) return resolved;
+    }
+
+    // Fallback: take any included broadcast.
+    if (Array.isArray(data?.included)) {
+      const anyBroadcast = data.included.find((item) => item.type === 'broadcast');
+      const resolved = fromBroadcast(anyBroadcast);
       if (resolved) return resolved;
     }
 

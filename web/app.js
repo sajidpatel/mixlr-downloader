@@ -281,8 +281,10 @@ const renderLive = (live = []) => {
     const channel = item.channel || item.stage || 'Unknown';
     const stage = item.stage || channel;
     const title = item.title || item.name || stage;
-    const baseStreamUrl = item.streamProxy || `/api/live/stream?channel=${encodeURIComponent(channel)}`;
-    const fallbackStreamUrl = item.streamUrl || item.stream || '';
+    const directStream = item.streamUrl || item.stream || '';
+    const fallbackLive = `/api/live/stream?channel=${encodeURIComponent(channel)}`;
+    const baseStreamUrl = item.streamProxy || directStream || fallbackLive;
+    const fallbackStreamUrl = directStream || fallbackLive;
     const coverImage = [item.logo, item.artwork, item.cover].find((val) => typeof val === 'string' && val.length) || null;
     const coverAlt = channel ? `${channel} logo` : 'Channel logo';
     const initial = (channel || stage || 'U').slice(0, 1).toUpperCase();
@@ -326,8 +328,8 @@ const renderLive = (live = []) => {
     const audio = document.createElement('audio');
     audio.className = 'live-audio library-hidden-audio';
     audio.dataset.channel = item.channel;
-    audio.preload = 'auto';
-    audio.src = baseStreamUrl || fallbackStreamUrl || '';
+    audio.preload = 'none';
+    audio.src = '';
     audio._manualStop = false;
     card.appendChild(audio);
 
@@ -344,8 +346,11 @@ const renderLive = (live = []) => {
     let lastRetryAt = 0;
     let shouldAutoRestart = false;
     let manualStop = false;
+    let failureCount = 0;
+    const maxFailures = 5;
     const scheduleRestart = () => {
       if (!shouldAutoRestart || manualStop || audio._manualStop) return;
+      if (failureCount >= maxFailures) return;
       const now = Date.now();
       if (now - lastRetryAt < 1200) return; // throttle retries
       lastRetryAt = now;
@@ -364,6 +369,7 @@ const renderLive = (live = []) => {
         audio._manualStop = false;
         stopAllLiveAudio();
         shouldAutoRestart = true;
+        failureCount = 0;
         audio.src = resolveStreamUrl();
         audio.load();
         const playPromise = audio.play();
@@ -405,6 +411,11 @@ const renderLive = (live = []) => {
         manualStop = false;
         audio._manualStop = false;
         shouldAutoRestart = true;
+        failureCount += 1;
+        if (failureCount >= maxFailures) {
+          shouldAutoRestart = false;
+          return;
+        }
         scheduleRestart();
       });
     });
@@ -438,20 +449,25 @@ const renderRunning = (running) => {
     const controls = btn.parentElement;
     const audio = document.createElement('audio');
     audio.controls = true;
-    audio.preload = 'auto';
-    audio.src = streamSrc;
+    audio.preload = 'none';
+    audio.src = '';
     audio.type = 'audio/mpeg';
     audio.className = 'hidden w-full rounded-xl border border-white/10 bg-white/5';
     controls.appendChild(audio);
 
     let shouldResume = false;
+    let failureCount = 0;
+    const maxFailures = 5;
     const attemptResume = () => {
       if (!shouldResume) return;
+      if (failureCount >= maxFailures) return;
       setTimeout(() => {
         if (!shouldResume) return;
+        if (!audio.src) audio.src = streamSrc;
         audio.load();
         audio.play().catch((err) => {
           if (isAbortError(err)) return;
+          failureCount += 1;
           setTimeout(attemptResume, 1200);
         });
       }, 300);
@@ -462,11 +478,10 @@ const renderRunning = (running) => {
     };
 
     btn.addEventListener('click', () => {
-      if (!audio.src) {
-        showToast('No stream URL for this recording', 'error');
-        return;
-      }
       if (audio.paused) {
+        failureCount = 0;
+        if (!audio.src) audio.src = streamSrc;
+        audio.load();
         audio.play().catch((err) => {
           if (isAbortError(err)) return;
           showToast(err.message, 'error');
@@ -480,6 +495,7 @@ const renderRunning = (running) => {
     audio.addEventListener('play', () => {
       audio.classList.remove('hidden');
       shouldResume = true;
+      failureCount = 0;
       updateBtn();
     });
     audio.addEventListener('pause', () => {
@@ -490,7 +506,17 @@ const renderRunning = (running) => {
       updateBtn();
       attemptResume();
     });
-    audio.addEventListener('error', attemptResume);
+    ['error', 'stalled', 'abort'].forEach((evt) => {
+      audio.addEventListener(evt, () => {
+        if (!shouldResume) return;
+        failureCount += 1;
+        if (failureCount >= maxFailures) {
+          shouldResume = false;
+          return;
+        }
+        attemptResume();
+      });
+    });
 
     runningBody.appendChild(tr);
   });
