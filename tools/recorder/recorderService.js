@@ -278,6 +278,7 @@ export class RecorderService {
       }
       return await response.json();
     } catch (err) {
+      const slug = channel?.toString().toLowerCase() || 'unknown-channel';
       this.error(`[${slug}] Error fetching data: ${err.message}`);
       return null;
     }

@@ -41,6 +41,7 @@ const getLibraryPageSize = () => (window.matchMedia('(max-width: 640px)').matche
 let selectingRangeStart = true; // legacy flag (unused now)
 const liveHlsMap = new WeakMap();
 const liveMseMap = new WeakMap();
+const liveProgressiveCache = new Map();
 
 const destroyLiveHls = (audio) => {
   const existing = liveHlsMap.get(audio);
@@ -56,6 +57,28 @@ const destroyLiveHls = (audio) => {
 const destroyLiveMse = (_audio) => {};
 
 const isAbortError = (err) => err && (err.name === 'AbortError' || err.code === 20);
+
+const fetchProgressiveStreamUrl = async (channel) => {
+  if (!channel) return null;
+  const key = channel.toString().toLowerCase();
+  if (liveProgressiveCache.has(key)) return liveProgressiveCache.get(key);
+  try {
+    const res = await fetch(`https://apicdn.mixlr.com/v3/channel_view/${encodeURIComponent(channel)}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const broadcasts = Array.isArray(data?.included) ? data.included.filter((item) => item.type === 'broadcast') : [];
+    const progressive = broadcasts
+      .map((b) => b.attributes?.progressive_stream_url)
+      .find((url) => typeof url === 'string' && url.length);
+    if (progressive) {
+      liveProgressiveCache.set(key, progressive);
+      return progressive;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
 
 window.addEventListener('unhandledrejection', (event) => {
   if (isAbortError(event.reason)) {
@@ -85,6 +108,7 @@ const api = async (path, options = {}) => {
   if (opts.body && !opts.headers) {
     opts.headers = { 'Content-Type': 'application/json' };
   }
+
   const response = await fetch(path, opts);
   const raw = await response.text();
   const parse = () => {
@@ -280,11 +304,11 @@ const renderLive = (live = []) => {
   if (!liveBody || !liveCount) return;
   liveBody.innerHTML = '';
 
-  if (!live.length) {
-    liveBody.innerHTML = '<p class="text-slate-400">No live feeds right now.</p>';
-    liveCount.textContent = '0';
-    return;
-  }
+    if (!live.length) {
+      liveBody.innerHTML = '<p class="text-slate-400">No live feeds right now.</p>';
+      liveCount.textContent = '0';
+      return;
+    }
 
   liveCount.textContent = String(live.length);
 
@@ -294,18 +318,21 @@ const renderLive = (live = []) => {
     const channel = item.channel || item.stage || 'Unknown';
     const stage = item.stage || channel;
     const title = item.title || item.name || stage;
+    const channelKey = channel.toString().toLowerCase();
     const directStream = item.streamUrl || item.stream || '';
     const fallbackLive = `/api/live/stream?channel=${encodeURIComponent(channel)}`;
-    const baseStreamUrl = item.streamProxy || directStream || fallbackLive;
-    const fallbackStreamUrl = directStream || fallbackLive;
+    const getCachedStream = () => {
+      const cachedProgressive = liveProgressiveCache.get(channelKey);
+      return item.streamProxy || cachedProgressive || directStream || fallbackLive;
+    };
     const coverImage = [item.logo, item.artwork, item.cover].find((val) => typeof val === 'string' && val.length) || null;
     const coverAlt = channel ? `${channel} logo` : 'Channel logo';
     const initial = (channel || stage || 'U').slice(0, 1).toUpperCase();
-    const resolveStreamUrl = () => {
-      const candidate = baseStreamUrl || fallbackStreamUrl || `/api/live/stream?channel=${encodeURIComponent(channel)}`;
-      const sep = candidate.includes('?') ? '&' : '?';
-      return `${candidate}${sep}t=${Date.now()}`;
+    const bust = (url) => {
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}t=${Date.now()}`;
     };
+    const resolveStreamUrl = () => bust(getCachedStream());
     const coverMarkup = coverImage
       ? `<img src="${coverImage}" alt="${coverAlt}" loading="lazy" class="player-cover__img" />`
       : `<div class="player-cover__fallback">${initial}</div>`;
@@ -383,12 +410,25 @@ const renderLive = (live = []) => {
         stopAllLiveAudio();
         shouldAutoRestart = true;
         failureCount = 0;
-        audio.src = resolveStreamUrl();
+        const initialUrl = resolveStreamUrl();
+        audio.src = initialUrl;
         audio.load();
         const playPromise = audio.play();
         Promise.resolve(playPromise).catch((err) => {
           if (isAbortError(err)) return;
           showToast(err.message || 'Could not start playback', 'error');
+        });
+        fetchProgressiveStreamUrl(channel).then((prog) => {
+          if (!prog) return;
+          if (liveProgressiveCache.get(channelKey) === prog) return;
+          liveProgressiveCache.set(channelKey, prog);
+          if (audio._manualStop || manualStop) return;
+          const progUrl = bust(prog);
+          if (progUrl !== audio.src) {
+            audio.src = progUrl;
+            audio.load();
+            audio.play().catch(() => {});
+          }
         });
       } else {
         manualStop = true;
@@ -724,7 +764,6 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
               <div class="player-cover">${coverMarkup}</div>
               <div class="player-text">
                 <div class="player-topline">
-                  <p class="player-kicker">${item.channel || 'Recorded set'}</p>
                   <div class="flex items-center gap-2">
                     <span class="player-icon-btn  bg-white/10 border border-white/15 text-[11px] font-semibold play-pill">${plays}</span>
                     ${downloadBtn}
