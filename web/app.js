@@ -26,12 +26,18 @@ const libraryRangeToggle = document.getElementById('library-range-toggle');
 const libraryRangePopover = document.getElementById('library-range-popover');
 const libraryRangeClear = document.getElementById('library-range-clear');
 const libraryRangeButtonLabel = document.getElementById('library-range-button-label');
+const libraryPrev = document.getElementById('library-prev');
+const libraryNext = document.getElementById('library-next');
+const libraryPageLabel = document.getElementById('library-page-label');
+const paginationDesktop = document.getElementById('library-pagination');
 let libraryItems = [];
 let playCounts = {};
 let libraryIsPlaying = false;
 let playSeenSession = {};
 let libraryHasLoaded = false;
 let libraryLoading = false;
+let libraryPage = 1;
+const getLibraryPageSize = () => (window.matchMedia('(max-width: 640px)').matches ? 5 : 12);
 let selectingRangeStart = true; // legacy flag (unused now)
 const liveHlsMap = new WeakMap();
 const liveMseMap = new WeakMap();
@@ -202,23 +208,30 @@ const playerIcons = {
   trash: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12c0 .6.4 1 1 1h8c.6 0 1-.4 1-1l1-12"></path><path d="M9 7V5c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v2"></path></svg>',
 };
 
-const loadPlayCounts = () => {
+const recordPlay = async (key) => {
+  if (!key) return;
+  const optimistic = (playCounts[key] || 0) + 1;
+  playCounts[key] = optimistic;
+  playSeenSession[key] = true;
   try {
-    const stored = localStorage.getItem('mixlr-play-counts');
-    playCounts = stored ? JSON.parse(stored) : {};
+    const res = await api('/api/plays', { method: 'POST', body: JSON.stringify({ key }) });
+    if (res?.count !== undefined) {
+      playCounts[key] = res.count;
+      return res.count;
+    }
   } catch {
-    playCounts = {};
+    // ignore network errors, keep optimistic count
   }
+  return playCounts[key];
 };
 
-const savePlayCounts = () => {
-  localStorage.setItem('mixlr-play-counts', JSON.stringify(playCounts));
-};
-
-const bumpPlayCount = (url) => {
-  playCounts[url] = (playCounts[url] || 0) + 1;
-  playSeenSession[url] = true;
-  savePlayCounts();
+const syncPlayCountsFromItems = (items = []) => {
+  playCounts = {};
+  items.forEach((item) => {
+    const key = item.playKey || item.path || item.relativePath || item.downloadUrl || item.url;
+    if (!key) return;
+    playCounts[key] = item.playCount || 0;
+  });
 };
 
 const showToast = (message, type = 'info') => {
@@ -618,10 +631,25 @@ const renderLibrarySkeleton = (count = 3) => {
   cards.forEach((card) => libraryBody.appendChild(card));
 };
 
+const updateLibraryPaginationControls = (page, totalPages, totalItems) => {
+  if (libraryPageLabel) {
+    if (totalItems === 0) {
+      libraryPageLabel.textContent = '0 / 0';
+    } else {
+      libraryPageLabel.textContent = `${page} / ${totalPages}`;
+    }
+  }
+  if (libraryPrev) libraryPrev.disabled = totalItems === 0 || page <= 1;
+  if (libraryNext) libraryNext.disabled = totalItems === 0 || page >= totalPages;
+  const anyItems = totalItems > 0;
+  if (paginationDesktop) paginationDesktop.classList.toggle('hidden', !anyItems);
+};
+
 const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 'date-desc', fromDate = '', toDate = '') => {
   if (libraryLoading) {
     renderLibrarySkeleton();
     libraryCount.textContent = '—';
+    updateLibraryPaginationControls(1, 1, 0);
     return;
   }
   libraryBody.innerHTML = '';
@@ -646,21 +674,30 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
   if (sorted.length === 0) {
     libraryBody.innerHTML = '<p class="text-slate-400">No recordings match.</p>';
     libraryCount.textContent = '0';
+    updateLibraryPaginationControls(1, 1, 0);
     return;
   }
 
-  libraryCount.textContent = sorted.length;
+  const totalItems = sorted.length;
+  const pageSize = getLibraryPageSize();
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (libraryPage > totalPages) libraryPage = totalPages;
+  const startIdx = (libraryPage - 1) * pageSize;
+  const pageItems = sorted.slice(startIdx, startIdx + pageSize);
 
-  sorted.forEach((item, idx) => {
+  libraryCount.textContent = totalItems;
+  updateLibraryPaginationControls(totalItems ? libraryPage : 1, totalPages, totalItems);
+
+  pageItems.forEach((item, idx) => {
     const card = document.createElement('div');
     card.className = 'library-card player-card p-0';
-    card.dataset.songIndex = idx;
+    card.dataset.songIndex = startIdx + idx;
     const when = formatTime(item.date ?? item.mtime);
     const durationSeconds = Number.isFinite(item.duration) ? item.duration : 0;
     const duration = durationSeconds ? formatDuration(durationSeconds) : null;
     const playbackUrl = item.downloadUrl || item.url;
-    const playKey = playbackUrl || item.url;
-    const plays = playCounts[playKey] || 0;
+    const playKey = item.playKey || item.path || item.relativePath || playbackUrl || item.url;
+    const plays = playCounts[playKey] || item.playCount || 0;
     const sizeLabel = formatSize(item.size);
     const displayName = item.file || 'Recording';
     const itemPath = item.path || item.relativePath || null;
@@ -767,9 +804,10 @@ const renderLibrary = (items = [], query = '', channelFilter = 'all', sortKey = 
     const handlePlayCount = () => {
       if (!playKey) return;
       if (playSeenSession[playKey]) return;
-      bumpPlayCount(playKey);
-      const updated = playCounts[playKey] || 0;
-      if (playPill) playPill.textContent = `${updated}`;
+      recordPlay(playKey).then((cnt) => {
+        const updated = cnt ?? playCounts[playKey] ?? 0;
+        if (playPill) playPill.textContent = `${updated}`;
+      }).catch(() => {});
     };
 
     playBtn?.addEventListener('click', () => {
@@ -872,6 +910,8 @@ const loadLibrary = async ({ skipIfPlaying = false, markLoaded = false } = {}) =
     const data = await api('/api/recordings');
     libraryItems = data.items || [];
     populateChannelFilter(libraryItems);
+    syncPlayCountsFromItems(libraryItems);
+    libraryPage = 1;
     renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
   } catch (err) {
     showToast(err.message, 'error');
@@ -957,7 +997,6 @@ const startPolling = () => {
 
 loadStatus();
 startPolling();
-loadPlayCounts();
 showTab('library');
 updateRangeLabel();
 
@@ -966,10 +1005,12 @@ tabButtons.forEach((btn) => {
 });
 
 document.getElementById('library-refresh')?.addEventListener('click', () => {
+  libraryPage = 1;
   loadLibrary({ markLoaded: true });
 });
 
 librarySearch?.addEventListener('input', () => {
+  libraryPage = 1;
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });
 
@@ -1003,15 +1044,18 @@ libraryRangeClear?.addEventListener('click', () => {
   if (libraryFrom) libraryFrom.value = '';
   if (libraryTo) libraryTo.value = '';
   updateRangeLabel();
+  libraryPage = 1;
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
   closeRangePopover();
 });
 
 librarySort?.addEventListener('change', () => {
+  libraryPage = 1;
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });
 
 libraryChannel?.addEventListener('change', () => {
+  libraryPage = 1;
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });
 
@@ -1026,6 +1070,7 @@ const applyRange = () => {
     if (libraryTo) libraryTo.value = end;
   }
   updateRangeLabel();
+  libraryPage = 1;
   renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
   if (start && end) {
     closeRangePopover();
@@ -1042,5 +1087,17 @@ libraryReset?.addEventListener('click', () => {
   if (libraryFrom) libraryFrom.value = '';
   if (libraryTo) libraryTo.value = '';
   updateRangeLabel();
+  libraryPage = 1;
   renderLibrary(libraryItems, '', 'all', 'date-desc', '', '');
+});
+
+libraryPrev?.addEventListener('click', () => {
+  if (libraryPage <= 1) return;
+  libraryPage -= 1;
+  renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
+});
+
+libraryNext?.addEventListener('click', () => {
+  libraryPage += 1;
+  renderLibrary(libraryItems, librarySearch.value, libraryChannel.value, librarySort.value, libraryFrom?.value, libraryTo?.value);
 });

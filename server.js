@@ -9,6 +9,7 @@ import ConverterService from './tools/converter/converterService.js';
 import HlsService from './tools/recorder/hlsService.js';
 import { convertDirectory, formatSummary } from './tools/converter/converter.js';
 import processAdapter from './tools/process/processAdapter.js';
+import PlayCountStore from './tools/playCountStore.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,6 +68,7 @@ const converterService = new ConverterService({
   summaryFn: formatSummary,
   defaultInputDir: recordingsRoot,
 });
+const playCountStore = new PlayCountStore(path.join(recordingsRoot, 'play-counts.json'));
 const hlsService = new HlsService({
   recorderService,
   hlsRoot,
@@ -82,6 +84,10 @@ if (process.env.NODE_ENV !== 'test') {
 
 function isTruthy(val) {
   return val === true || val === '1' || (typeof val === 'string' && val.toLowerCase() === 'true');
+}
+
+function playKeyForItem(item) {
+  return item.path || item.relativePath || item.downloadUrl || item.url || null;
 }
 
 function buildAltRelPath(relPath) {
@@ -439,7 +445,11 @@ app.get('/api/recordings', async (_req, res) => {
       rootDir: recordingsRoot,
       getMediaForChannel: (channel) => recorderService.getChannelMedia(channel),
     });
-    res.json({ items });
+    const enriched = items.map((item) => {
+      const key = playKeyForItem(item);
+      return { ...item, playCount: key ? playCountStore.get(key) : 0, playKey: key };
+    });
+    res.json({ items: enriched });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -561,6 +571,26 @@ app.get('/api/live/hls/:channel', async (req, res) => {
   } catch (err) {
     const status = err.message === 'Channel not live' ? 404 : 500;
     res.status(status).json({ error: err.message });
+  }
+});
+
+app.get('/api/plays', async (_req, res) => {
+  try {
+    const counts = await playCountStore.getAll();
+    res.json({ counts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/plays', async (req, res) => {
+  const { key } = req.body || {};
+  if (!key) return res.status(400).json({ error: 'key is required' });
+  try {
+    const count = await playCountStore.increment(key);
+    res.json({ ok: true, key, count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

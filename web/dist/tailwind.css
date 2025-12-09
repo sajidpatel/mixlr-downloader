@@ -1764,6 +1764,14 @@ audio::-webkit-media-controls-volume-slider-container {
   background-color: rgb(255 255 255 / 0.1);
 }
 
+.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
+}
+
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+
 @media (min-width: 640px) {
   .sm\:grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
