@@ -50,6 +50,8 @@
     .library-card, .player-card { overflow: hidden; }
     .mobile-hide { display: none; }
     .pagination-desktop { display: flex; }
+    .tab-panel { display: none; }
+    .tab-panel.is-active { display: grid; }
     @media (min-width: 640px) {
       .mobile-hide { display: flex; }
       .library-filter-advanced { flex: 1 1 auto; }
@@ -167,7 +169,7 @@
       </section>
     </main>
 
-    <main class="grid gap-4 tab-panel" data-tab-panel="library">
+    <main class="grid gap-4 tab-panel is-active" data-tab-panel="library">
       <section class="bg-slate-900/70 border border-white/10 rounded-3xl p-5 shadow-xl space-y-4">
         <div class="flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -238,6 +240,6 @@
   </div>
 
   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 rounded-xl border border-white/10 bg-slate-900/90 px-4 py-3 text-sm text-slate-50 shadow-lg"></div>
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
