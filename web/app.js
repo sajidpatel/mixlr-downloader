@@ -121,7 +121,12 @@ const api = async (path, options = {}) => {
   };
   if (!response.ok) {
     const message = raw?.trim() || response.statusText;
-    throw new Error(message || 'Request failed');
+    const err = new Error(message || 'Request failed');
+    if (response.status === 401) {
+      err.isUnauthorized = true;
+      showToast('Unauthorized: add ?token=<API_TOKEN> to your URL or configure X-API-Key.', 'error');
+    }
+    throw err;
   }
   return parse();
 };
@@ -969,7 +974,7 @@ const showTab = (tab) => {
   });
   tabPanels.forEach((panel) => {
     const active = panel.dataset.tabPanel === tab;
-    panel.classList.toggle('hidden', !active);
+    panel.hidden = !active;
   });
   if (tab === 'library' && !libraryHasLoaded) {
     loadLibrary({ markLoaded: true });

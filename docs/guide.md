@@ -11,8 +11,24 @@ cd mixlr-downloader
 cp .env.example .env        # adjust PORT if desired
 npm install
 npm run build:css           # only if you change CSS; dist is already committed
-npm start                   # serves http://localhost:3000
+npm start                   # serves http://localhost:3000 (binds to 127.0.0.1)
 ```
+
+The server binds to the loopback interface by default so the UI/API are local-only. Set `BIND_ADDRESS=0.0.0.0` only if you intentionally want remote access.
+
+Environment (common):
+- `PORT=3000`
+- `BIND_ADDRESS=0.0.0.0` only if you intentionally want remote access.
+- `API_TOKEN` (recommended for remote deployments). Protects all `/api`, `/recordings`, and `/live` endpoints. Supply via `X-API-Key`, `Authorization: Bearer`, a `token` query param (sets an HttpOnly cookie), or a `mixlr_api_token` cookie.
+  - Public even when `API_TOKEN` is set: `GET /api/status`, `GET/POST /api/plays`, `GET /api/recordings` (but `DELETE /api/recordings` stays protected).
+  - `DELETE /api/recordings` is blocked unless `API_TOKEN` is configured.
+
+## Deploying on Coolify (Hetzner)
+- Use `Dockerfile.coolify` when creating the service.
+- Set `PORT=3000`, `BIND_ADDRESS=0.0.0.0`, and `API_TOKEN` so Coolify’s proxy can reach and authenticate to the container.
+- Attach persistent volumes to `/app/recordings` and `/app/hls`.
+- Keep routing restricted (e.g., Coolify auth, IP allowlists) if you don’t want the API exposed broadly.
+- Example: configure your proxy to inject `X-API-Key: <token>` for upstream requests, or hit `https://your.domain/?token=<token>` once to set an HttpOnly cookie for browser use.
 
 ## Usage
 - Open `http://localhost:3000`.

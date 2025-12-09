@@ -16,6 +16,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.BIND_ADDRESS || '127.0.0.1';
+const API_TOKEN = process.env.API_TOKEN?.trim() || null;
+const TOKEN_COOKIE = 'mixlr_api_token';
 const webRoot = path.join(__dirname, 'web');
 const recordingsEnv = process.env.RECORDINGS_DIR;
 const hlsEnv = process.env.HLS_DIR;
@@ -207,6 +210,70 @@ function serveFileWithRange(req, res, filePath, stats) {
   });
   stream.pipe(res);
 }
+
+function parseCookies(header) {
+  if (!header) return {};
+  return header.split(';').reduce((acc, part) => {
+    const [key, ...rest] = part.trim().split('=');
+    if (!key) return acc;
+    acc[decodeURIComponent(key)] = decodeURIComponent(rest.join('=') || '');
+    return acc;
+  }, {});
+}
+
+function extractToken(req, cookies = null) {
+  const cookieBag = cookies || parseCookies(req.headers.cookie || '');
+  const headerToken = req.get('x-api-key') || req.get('x-access-token');
+  const authHeader = req.get('authorization');
+  const bearerToken = authHeader && authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice('bearer '.length).trim()
+    : null;
+  const queryToken = req.query?.token;
+  return headerToken || bearerToken || cookieBag[TOKEN_COOKIE] || queryToken || null;
+}
+
+function isPublicRoute(req) {
+  console.log(req.method, req.path);
+  if (req.method === 'GET' && req.path === '/api/status') return true;
+  if (req.path === '/api/plays') return true; // allow both GET and POST
+  if (req.path === '/api/recordings' && req.method !== 'DELETE') return true; // list is public; deletion is protected
+  return false;
+}
+
+function needsAuth(req) {
+  if (!API_TOKEN) return false;
+  if (isPublicRoute(req)) return false;
+  return req.path.startsWith('/api') || req.path.startsWith('/recordings') || req.path.startsWith('/live');
+}
+
+app.use((req, res, next) => {
+  if (!API_TOKEN) return next();
+  const cookies = parseCookies(req.headers.cookie || '');
+  const queryToken = req.query?.token;
+  if (queryToken === API_TOKEN && !cookies[TOKEN_COOKIE]) {
+    res.cookie(TOKEN_COOKIE, API_TOKEN, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isTruthy(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === 'production')),
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+  }
+  if (!needsAuth(req)) return next();
+  const token = extractToken(req, cookies);
+  if (token === API_TOKEN) {
+    if (!cookies[TOKEN_COOKIE]) {
+      res.cookie(TOKEN_COOKIE, API_TOKEN, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: isTruthy(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === 'production')),
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
+    }
+    return next();
+  }
+  res.setHeader('WWW-Authenticate', 'Bearer realm="mixlr-tools"');
+  return res.status(401).json({ error: 'Unauthorized' });
+});
 
 app.get('/recordings/*', async (req, res) => {
   let filePath;
@@ -456,6 +523,8 @@ app.get('/api/recordings', async (_req, res) => {
 });
 
 app.delete('/api/recordings', async (req, res) => {
+  if (!API_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+
   const relPath = req.body?.path;
   if (!relPath) return res.status(400).json({ error: 'path is required' });
 
@@ -598,10 +667,11 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(webRoot, 'index.html'));
 });
 
-export function startServer(port = PORT, attempt = 0) {
+export function startServer(port = PORT, host = HOST, attempt = 0) {
   const server = app
-    .listen(port, () => {
-      console.log(`Web UI available at http://localhost:${port}`);
+    .listen(port, host, () => {
+      const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+      console.log(`Web UI available at http://${displayHost}:${port}`);
       Promise.all([
         recorderService.ensureRecordingDir(),
         fs.mkdir(hlsRoot, { recursive: true }),
@@ -610,8 +680,8 @@ export function startServer(port = PORT, attempt = 0) {
     .on('error', (err) => {
       if (err.code === 'EADDRINUSE' && attempt < MAX_PORT_ATTEMPTS) {
         const nextPort = port + 1;
-        console.warn(`Port ${port} in use, retrying on ${nextPort}...`);
-        startServer(nextPort, attempt + 1);
+        console.warn(`Port ${port} in use on ${host}, retrying on ${nextPort}...`);
+        startServer(nextPort, host, attempt + 1);
       } else {
         console.error(`Failed to start server after ${attempt + 1} attempts: ${err.message}`);
         process.exit(1);
@@ -622,7 +692,7 @@ export function startServer(port = PORT, attempt = 0) {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  startServer(PORT);
+  startServer(PORT, HOST);
 }
 
 export { app, recorderService, converterService };
