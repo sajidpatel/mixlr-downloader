@@ -43,6 +43,20 @@ Environment (common):
   - Search, filter by channel/date, sort, and play/download recordings.
   - Library data loads once when opening the tab; click Refresh to fetch new recordings without losing filters.
 
+## Headless live monitor (no browser)
+- Purpose: run on a separate worker/cron host to detect when channels go live and send a webhook once per new live event.
+- Command: `npm run monitor:live` (loops forever). Use `node server/liveMonitorWorker.js` for a single run (e.g., cron).
+- Env vars:
+  - `MONITOR_CHANNELS=chan1,chan2` (default uses built-in channel list)
+  - `MONITOR_WEBHOOK_URL=https://example.com/hook` (required to actually alert)
+  - `MONITOR_INTERVAL_MS=60000` (loop interval; default 60s)
+  - `MONITOR_STATE_FILE=/var/tmp/mixlr-live-state.json` (tracks what was already announced; default `./live-monitor-state.json`)
+  - `MONITOR_LOOP=1` (set to loop when not using `npm run monitor:live`)
+- Cron example (every minute, single-run with persisted state + webhook):
+```
+* * * * * cd /path/to/mixlr && MONITOR_WEBHOOK_URL=https://example.com/hook MONITOR_STATE_FILE=/var/tmp/mixlr-live-state.json node server/liveMonitorWorker.js >> /var/log/mixlr-live-monitor.log 2>&1
+```
+
 ## Troubleshooting
 - **Port already in use**: change `PORT` in `.env` or free the port and restart.
 - **FFmpeg not found**: install FFmpeg and ensure it is on PATH (`brew install ffmpeg`, `apt-get install ffmpeg`, or download binaries).

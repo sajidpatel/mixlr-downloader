@@ -40,6 +40,7 @@ Create a `.env` (or set vars in your host):
 - `npm run build:css` – build Tailwind CSS
 - `npm run dev:css` – watch Tailwind during development
 - `npm run recorder:tui` – terminal UI recorder (legacy helper)
+- `npm run monitor:live` – headless live monitor with webhook alerts (looping)
 
 ## Docs
 - Detailed setup, usage, and troubleshooting: `docs/guide.md`
