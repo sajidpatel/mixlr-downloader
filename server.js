@@ -20,14 +20,10 @@ import {
   hlsService,
   processAdapter,
 } from './server/services.js';
-import { registerStatusRoutes } from './server/routes/status.js';
-import { registerRecorderRoutes } from './server/routes/recorder.js';
-import { registerConverterRoutes } from './server/routes/converter.js';
 import { registerRecordingRoutes } from './server/routes/recordings.js';
 import { registerLiveRoutes } from './server/routes/live.js';
 import { registerPlayRoutes } from './server/routes/plays.js';
 import { registerFallbackRoute } from './server/routes/fallback.js';
-import { StatusBroadcaster } from './server/statusStream.js';
 
 const app = express();
 
@@ -36,20 +32,11 @@ const { streamGrowingFile, serveFileWithRange } = createStreamHelpers({
   followIdleTimeoutMs: FOLLOW_IDLE_TIMEOUT_MS,
   followPollIntervalMs: FOLLOW_POLL_INTERVAL_MS,
 });
-const statusBroadcaster = new StatusBroadcaster({
-  recorderService,
-  converterService,
-  recordingsRoot,
-});
-
 app.use(createAuthMiddleware());
 app.use(express.json());
 app.use(express.static(webRoot));
 app.use('/live', express.static(hlsRoot));
 
-registerStatusRoutes(app, { recorderService, converterService, recordingsRoot, statusBroadcaster });
-registerRecorderRoutes(app, { recorderService });
-registerConverterRoutes(app, { converterService });
 registerRecordingRoutes(app, {
   recorderService,
   processAdapter,
@@ -71,7 +58,6 @@ export function startServer(port = PORT, host = HOST, attempt = 0) {
         recorderService.ensureRecordingDir(),
         fs.mkdir(hlsRoot, { recursive: true }),
       ])
-        .then(() => statusBroadcaster.start())
         .catch((err) => console.error(`Failed to ensure directories: ${err.message}`));
     })
     .on('error', (err) => {

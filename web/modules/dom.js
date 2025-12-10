@@ -1,17 +1,8 @@
-export const manualChannelInput = document.getElementById('manual-channel');
 export const runningBody = document.getElementById('running-body');
 export const monitoringBadge = document.getElementById('monitoring-badge');
 export const monitoringState = document.getElementById('monitoring-state');
 export const runningCount = document.getElementById('running-count');
-export const lastConversion = document.getElementById('last-conversion');
-export const convertStatus = document.getElementById('convert-status');
-export const convertBadge = document.getElementById('convert-badge');
 export const toastEl = document.getElementById('toast');
-export const convertBtn = document.getElementById('convert-btn');
-export const inputDirField = document.getElementById('input-dir');
-export const deleteSourceField = document.getElementById('delete-source');
-export const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
-export const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 export const liveBody = document.getElementById('live-body');
 export const liveCount = document.getElementById('live-count');
 export const libraryBody = document.getElementById('library-body');

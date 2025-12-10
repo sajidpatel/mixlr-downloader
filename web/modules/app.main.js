@@ -1,17 +1,8 @@
 import { createApi, isAbortError } from './api.js';
 import { createToast } from './ui.js';
-import {
-  toastEl,
-  convertStatus,
-  convertBadge,
-  lastConversion,
-} from './dom.js';
-import { bindTabs, showTab } from './tabs.js';
-import { bindRecorderForm } from './recorder.js';
-import { bindConverterForm } from './converter.js';
+import { toastEl } from './dom.js';
 import { renderLibrary, loadLibrary } from './library.js';
 import { bindLibraryControls, ensureLibraryLoaded } from './libraryControls.js';
-import { loadStatus, startPolling } from './status.js';
 
 const showToast = createToast(toastEl);
 const api = createApi(showToast);
@@ -19,11 +10,7 @@ const api = createApi(showToast);
 const deps = {
   api,
   showToast,
-  convertStatus,
-  convertBadge,
-  lastConversion,
   render: () => renderLibrary(),
-  loadStatus: () => loadStatus(deps),
 };
 
 window.addEventListener('unhandledrejection', (event) => {
@@ -47,19 +34,8 @@ if (typeof HTMLMediaElement !== 'undefined') {
 }
 
 const bootstrap = () => {
-  bindTabs((tab) => {
-    showTab(tab);
-    ensureLibraryLoaded(tab, deps);
-  });
-
-  bindRecorderForm(deps);
-  bindConverterForm(deps);
   bindLibraryControls(deps);
 
-  loadStatus(deps);
-  startPolling(deps, 7000);
-
-  showTab('library');
   ensureLibraryLoaded('library', deps);
   loadLibrary({ markLoaded: true }, deps);
 };

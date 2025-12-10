@@ -127,7 +127,6 @@ test('extractToken returns null when no token is present', () => {
 
 test('public routes are accessible without API_TOKEN', () => {
   const publicRoutes = [
-    { path: '/api/status', method: 'GET' },
     { path: '/api/plays', method: 'GET' },
     { path: '/api/plays', method: 'POST' },
     { path: '/api/recordings', method: 'GET' },
@@ -141,11 +140,8 @@ test('public routes are accessible without API_TOKEN', () => {
 
 test('protected routes require authentication when API_TOKEN is configured', () => {
   const API_TOKEN = 'test-secret-token';
-  
+
   const protectedRoutes = [
-    { path: '/api/recorder/start', method: 'POST' },
-    { path: '/api/recorder/stop', method: 'POST' },
-    { path: '/api/converter/run', method: 'POST' },
     { path: '/api/recordings', method: 'DELETE' },
     { path: '/recordings/somefile.mp3', method: 'GET' },
     { path: '/live/stream', method: 'GET' },
@@ -159,42 +155,42 @@ test('protected routes require authentication when API_TOKEN is configured', () 
 
 test('protected routes are blocked without valid token when API_TOKEN is configured', () => {
   const API_TOKEN = 'valid-secret-token';
-  
+
   const req = createMockRequest({
-    path: '/api/recorder/start',
-    method: 'POST',
+    path: '/api/recordings',
+    method: 'DELETE',
     headers: { 'x-api-key': 'invalid-token' },
   });
 
   const token = extractToken(req);
   const authRequired = needsAuth(req, API_TOKEN);
-  
+
   assert.equal(authRequired, true);
   assert.notEqual(token, API_TOKEN);
 });
 
 test('protected routes are accessible with valid token when API_TOKEN is configured', () => {
   const API_TOKEN = 'valid-secret-token';
-  
+
   const req = createMockRequest({
-    path: '/api/recorder/start',
-    method: 'POST',
+    path: '/api/recordings',
+    method: 'DELETE',
     headers: { 'x-api-key': 'valid-secret-token' },
   });
 
   const token = extractToken(req);
   const authRequired = needsAuth(req, API_TOKEN);
-  
+
   assert.equal(authRequired, true);
   assert.equal(token, API_TOKEN);
 });
 
 test('routes do not require auth when API_TOKEN is not configured', () => {
   const API_TOKEN = null;
-  
+
   const req = createMockRequest({
-    path: '/api/recorder/start',
-    method: 'POST',
+    path: '/api/recordings',
+    method: 'DELETE',
   });
 
   const authRequired = needsAuth(req, API_TOKEN);
@@ -207,13 +203,13 @@ test('startServer binds to specified host and port', async (t) => {
 
   const testHost = '127.0.0.1';
   const testPort = 0; // Let OS assign available port
-  
+
   await new Promise((resolve, reject) => {
     const server = app.listen(testPort, testHost, () => {
       const address = server.address();
       assert.equal(address.address, testHost);
       assert.ok(address.port > 0);
-      
+
       server.close((err) => {
         if (err) reject(err);
         else resolve();
@@ -227,7 +223,7 @@ test('startServer binds to specified host and port', async (t) => {
 test('startServer handles port in use by trying next port', async (t) => {
   const app1 = express();
   const app2 = express();
-  
+
   // Create a server occupying a port
   const server1 = await new Promise((resolve, reject) => {
     const srv = app1.listen(0, '127.0.0.1', () => resolve(srv));
@@ -235,7 +231,7 @@ test('startServer handles port in use by trying next port', async (t) => {
   });
 
   const occupiedPort = server1.address().port;
-  
+
   // Simulate retry logic
   let attemptedPort = occupiedPort;
   let serverStarted = false;
@@ -249,7 +245,7 @@ test('startServer handles port in use by trying next port', async (t) => {
           serverStarted = true;
           srv.close(() => resolve());
         });
-        
+
         srv.on('error', (err) => {
           if (err.code === 'EADDRINUSE') {
             attemptedPort++;
@@ -266,7 +262,7 @@ test('startServer handles port in use by trying next port', async (t) => {
   }
 
   server1.close();
-  
+
   assert.ok(serverStarted, 'Server should eventually start on an available port');
   assert.ok(attempts > 0, 'Server should have retried at least once');
 });
@@ -331,7 +327,7 @@ test('API client sets isUnauthorized flag only for 401 responses', () => {
 test('parseCookies correctly parses cookie header', () => {
   const cookieHeader = 'session=abc123; mixlr_api_token=token123; foo=bar';
   const cookies = parseCookies(cookieHeader);
-  
+
   assert.equal(cookies.session, 'abc123');
   assert.equal(cookies.mixlr_api_token, 'token123');
   assert.equal(cookies.foo, 'bar');
@@ -340,7 +336,7 @@ test('parseCookies correctly parses cookie header', () => {
 test('parseCookies handles URL-encoded values', () => {
   const cookieHeader = 'token=hello%20world; special=%3D%26%3F';
   const cookies = parseCookies(cookieHeader);
-  
+
   assert.equal(cookies.token, 'hello world');
   assert.equal(cookies.special, '=&?');
 });

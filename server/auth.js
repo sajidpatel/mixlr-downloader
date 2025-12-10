@@ -22,8 +22,6 @@ function extractToken(req, cookies = null) {
 }
 
 function isPublicRoute(req) {
-  if (req.method === 'GET' && req.path === '/api/status') return true;
-  if (req.method === 'GET' && req.path === '/api/status/stream') return true;
   if (req.path === '/api/plays') return true; // allow both GET and POST
   if (req.path === '/api/recordings' && req.method !== 'DELETE') return true; // list is public; deletion is protected
   return false;

@@ -3,6 +3,7 @@ import { formatBytes } from './ui.js';
 import { isAbortError } from './api.js';
 
 export const renderRunning = (running, { showToast }) => {
+  if (!runningBody) return;
   runningBody.innerHTML = '';
   if (!running || running.length === 0) {
     runningBody.innerHTML = '<tr><td class="px-3 py-3 text-center text-slate-400" colspan="4">No recordings yet.</td></tr>';
