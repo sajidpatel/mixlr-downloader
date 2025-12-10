@@ -48,12 +48,10 @@
       min-width: 140px;
     }
     .library-card, .player-card { overflow: hidden; }
-    .mobile-hide { display: none; }
     .pagination-desktop { display: flex; }
     .tab-panel { display: none; }
     .tab-panel.is-active { display: grid; }
     @media (min-width: 640px) {
-      .mobile-hide { display: flex; }
       .library-filter-advanced { flex: 1 1 auto; }
     }
   </style>
@@ -86,13 +84,13 @@
         </div>
 
         <div class="library-filter-bar">
-          <div class="library-filter-channel">
-            <select id="library-channel" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm">
-              <option value="all">All channels</option>
-            </select>
-          </div>
-          <div class="library-filter-advanced mobile-hide">
+          <div class="library-filter-advanced flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <input id="library-search" type="search" placeholder="Search channel, date, file..." class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm flex-1 min-w-[200px]" />
+            <div class="library-filter-channel">
+              <select id="library-channel" class="rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm w-full sm:w-auto">
+                <option value="all">All channels</option>
+              </select>
+            </div>
             <div class="relative flex flex-col gap-1">
               <button id="library-range-toggle" type="button" class="w-full text-left rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2 text-sm flex items-center justify-between gap-2">
                 <span id="library-range-button-label">Pick start and end</span>

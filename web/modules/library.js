@@ -63,6 +63,7 @@ const sortItems = (items, sortKey) => {
 let currentAudio = null;
 let currentCard = null;
 let progressRaf = null;
+const SKIP_INTERVAL_SECONDS = 10;
 
 const resetProgressUi = (card) => {
   if (!card) return;
@@ -246,24 +247,38 @@ const attachCardHandlers = (cardEls, paged, startIdx, deps) => {
     const channel = item.channel || 'Unknown channel';
     const playbackUrl = item.downloadUrl || item.url;
     const channelKey = channel.toString().toLowerCase();
+    const ensureLibraryAudio = () => {
+      if (card._libraryAudio) return card._libraryAudio;
+      if (!playbackUrl) return null;
+      const audio = document.createElement('audio');
+      audio.className = 'library-hidden-audio';
+      audio.preload = 'metadata';
+      audio.src = playbackUrl;
+      audio.load();
+      card.querySelector('.player-shell')?.appendChild(audio);
+      card._libraryAudio = audio;
+      attachAudioHandlers(audio, card, playKey, deps);
+      return audio;
+    };
+    const seekLibraryAudio = (deltaSeconds = 0) => {
+      const audio = ensureLibraryAudio();
+      if (!audio) return;
+      const duration = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+      let nextTime = audio.currentTime + deltaSeconds;
+      if (nextTime < 0) nextTime = 0;
+      if (Number.isFinite(duration)) nextTime = Math.min(nextTime, duration);
+      audio.currentTime = nextTime;
+    };
 
     const playBtn = card.querySelector('.play-btn');
     const playPill = card.querySelector('.play-pill');
     const playLiveBtn = card.querySelector('.play-live-btn');
     const downloadBtn = card.querySelector('.download-btn');
     const deleteBtn = card.querySelector('.delete-btn');
+    const skipBackBtn = card.querySelector('.player-skip-back-btn');
+    const skipForwardBtn = card.querySelector('.player-skip-forward-btn');
 
     if (playBtn && playbackUrl) {
-      let audio = card._libraryAudio;
-      if (!audio) {
-        audio = document.createElement('audio');
-        audio.className = 'library-hidden-audio';
-        audio.preload = 'metadata';
-        card.querySelector('.player-shell')?.appendChild(audio);
-        card._libraryAudio = audio;
-        attachAudioHandlers(audio, card, playKey, deps);
-      }
-
       playBtn.addEventListener('click', () => {
         stopAllLiveAudio();
         fetchProgressiveStreamUrl(channel).then((prog) => {
@@ -271,6 +286,9 @@ const attachCardHandlers = (cardEls, paged, startIdx, deps) => {
           if (state.liveProgressiveCache.get(channelKey) === prog) return;
           state.liveProgressiveCache.set(channelKey, prog);
         });
+
+        const audio = ensureLibraryAudio();
+        if (!audio) return;
 
         if (currentAudio && currentCard === card) {
           if (currentAudio.paused) {
@@ -293,6 +311,24 @@ const attachCardHandlers = (cardEls, paged, startIdx, deps) => {
           deps.showToast(err.message || 'Could not start playback', 'error');
           stopCurrentLibraryAudio();
         });
+      });
+    }
+
+    if (skipBackBtn) {
+      skipBackBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!playbackUrl) return;
+        seekLibraryAudio(-SKIP_INTERVAL_SECONDS);
+      });
+    }
+
+    if (skipForwardBtn) {
+      skipForwardBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!playbackUrl) return;
+        seekLibraryAudio(SKIP_INTERVAL_SECONDS);
       });
     }
 
@@ -482,10 +518,22 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
           <div class="player-divider"></div>
           <div class="player-bottom">
             <div class="player-icon-row player-icon-row--wide">
+              <button class="player-icon-btn player-skip-btn player-skip-back-btn" aria-label="Rewind 10 seconds">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 5 12 12l7 7"></path>
+                  <path d="M12 5 5 12l7 7"></path>
+                </svg>
+              </button>
               <button class="player-main-btn play-btn" aria-pressed="false" aria-label="Play ${escapeAttr(fileName)}">
                 <span class="player-main-btn__icon">
                   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
                 </span>
+              </button>
+              <button class="player-icon-btn player-skip-btn player-skip-forward-btn" aria-label="Fast-forward 10 seconds">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 5 12 12 5 19"></path>
+                  <path d="M12 5 19 12 12 19"></path>
+                </svg>
               </button>
               <div class="player-icon-group">
                 <a class="player-icon-btn download-btn" href="/recordings/${escapeAttr(itemPath)}" download="${escapeAttr(fileName)}" aria-label="Download ${escapeAttr(fileName)}">
