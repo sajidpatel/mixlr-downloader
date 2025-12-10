@@ -1,6 +1,16 @@
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
 
+/**
+ * Create helpers for streaming files over HTTP: one that follows a file as it grows and one that serves files with HTTP Range support.
+ * @param {{recorderService: Object, followIdleTimeoutMs: number, followPollIntervalMs: number}} options - Configuration.
+ * @param {Object} options.recorderService - Service providing contentTypeFor(filePath).
+ * @param {number} options.followIdleTimeoutMs - Milliseconds of idle time after which a growing-file stream is ended.
+ * @param {number} options.followPollIntervalMs - Milliseconds between checks for new data when following a growing file.
+ * @returns {{streamGrowingFile: function(req, res, filePath), serveFileWithRange: function(req, res, filePath, stats)}} An object with:
+ *   - `streamGrowingFile(req, res, filePath)`: streams file data incrementally as the file grows, ends the response after the configured idle timeout, and stops when the client closes the connection or the file is removed.
+ *   - `serveFileWithRange(req, res, filePath, stats)`: serves the file honoring the request's `Range` header (responds with 206 when a range is served), sets appropriate `Content-Type`, `Content-Length`, `Accept-Ranges` and `Content-Range` headers, and responds 404 if the file is missing or 500 on other read errors.
+ */
 export function createStreamHelpers({ recorderService, followIdleTimeoutMs, followPollIntervalMs }) {
   const streamGrowingFile = async (req, res, filePath) => {
     let position = 0;

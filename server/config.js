@@ -22,6 +22,18 @@ export const HLS_SEGMENT_SECONDS = 4;
 const recordingsEnv = process.env.RECORDINGS_DIR;
 const hlsEnv = process.env.HLS_DIR;
 
+/**
+ * Resolve a writable directory by validating the preferred path and, if necessary, an optional fallback.
+ *
+ * Attempts to create and verify write access to `preferred`; if it is not writable and `fallback` is provided,
+ * attempts the same checks on `fallback`. Returns the first path that passes the write probe.
+ *
+ * @param {string} preferred - The primary directory path to validate for writability.
+ * @param {string} [fallback] - An alternate directory path to validate if the preferred path is not writable.
+ * @returns {string} The path of a directory that is writable.
+ * @throws {Error} If neither `preferred` nor `fallback` (when provided) is writable.
+ * @throws {*} Rethrows underlying filesystem errors other than permission/access denials.
+ */
 async function resolveWritableDir(preferred, fallback) {
   const tryDir = async (dir) => {
     try {
@@ -58,6 +70,11 @@ export const hlsRoot = await resolveWritableDir(
   path.join('/tmp', 'mixlr-hls'),
 );
 
+/**
+ * Determine whether a value represents an explicit truthy flag.
+ * @param {*} val - Value to evaluate; recognized forms are the boolean `true`, the string `'1'`, or the string `'true'` (case-insensitive).
+ * @returns {boolean} `true` if `val` is boolean `true`, the string `'1'`, or the string `'true'` (case-insensitive), `false` otherwise.
+ */
 export function isTruthy(val) {
   return val === true || val === '1' || (typeof val === 'string' && val.toLowerCase() === 'true');
 }

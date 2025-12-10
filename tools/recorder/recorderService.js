@@ -21,6 +21,12 @@ export const DEFAULT_CHANNELS = [
 
 const safeFetch = (...args) => (globalThis.fetch ? globalThis.fetch(...args) : fetch(...args));
 
+/**
+ * Convert a channel identifier or display name into a normalized slug used by the API.
+ *
+ * @param {string|any} channel - Channel name, slug, or value coercible to string; null/undefined returns an empty string.
+ * @returns {string} The normalized slug (lowercased and trimmed) or a mapped alias; returns an empty string for falsy input.
+ */
 function normalizeChannelSlug(channel) {
   if (!channel) return '';
   const raw = channel.toString().trim().toLowerCase();
@@ -32,6 +38,12 @@ function normalizeChannelSlug(channel) {
   return raw;
 }
 
+/**
+ * Resolve a recordings root directory to an absolute filesystem path.
+ *
+ * @param {string} [rootDir] - Path to the recordings root; if omitted or falsy, the current working directory is used.
+ * @returns {string} The resolved absolute path. 
+ */
 function normalizeRoot(rootDir) {
   return path.resolve(rootDir || '.');
 }
