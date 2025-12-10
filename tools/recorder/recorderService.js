@@ -283,7 +283,6 @@ export class RecorderService {
     try {
       const slug = normalizeChannelSlug(channel);
       const encodedSlug = slug ? encodeURIComponent(slug) : '';
-      console.log(`${API_BASE_URL}${encodedSlug}`);
       const response = await safeFetch(`${API_BASE_URL}${encodedSlug}`);
       if (!response.ok) {
         this.error(`[${slug}] Error fetching API: ${response.statusText}`);
