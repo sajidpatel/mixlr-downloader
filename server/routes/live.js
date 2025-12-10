@@ -1,6 +1,20 @@
 import path from 'path';
 import fs from 'fs/promises';
 
+/**
+ * Register HTTP routes for live audio streaming and HLS playlist retrieval.
+ *
+ * Registers:
+ * - GET /api/live/stream — streams live audio for a channel (serves a local growing file if present; otherwise proxies the remote stream through ffmpeg to MP3).
+ * - GET /api/live/hls/:channel — starts an HLS session for a channel and returns a playlist URL with a cache-busting timestamp.
+ *
+ * @param {import('express').Express} app - Express application to attach routes to.
+ * @param {Object} deps - Service dependencies.
+ * @param {{ getRunning: Function, listLiveStreams: Function }} deps.recorderService - Service for querying currently running recordings and available live streams.
+ * @param {{ startSession: Function }} deps.hlsService - Service that starts HLS sessions and returns a playlist URL.
+ * @param {{ spawnProcess: Function }} deps.processAdapter - Adapter used to spawn and manage external processes (ffmpeg).
+ * @param {Function} deps.streamGrowingFile - Function to stream a file that is still being written to: (req, res, filePath) => void.
+ */
 export function registerLiveRoutes(app, { recorderService, hlsService, processAdapter, streamGrowingFile }) {
   app.get('/api/live/stream', async (req, res) => {
     const { channel } = req.query;

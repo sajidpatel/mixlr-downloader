@@ -1,3 +1,20 @@
+/**
+ * Register HTTP POST routes under /api/recorder to control a recorder service.
+ *
+ * Registers endpoints that start/stop monitoring, refresh channel checks,
+ * start/stop individual recordings, and stop all recordings.
+ *
+ * @param {import('express').Application} app - Express application instance to attach routes to.
+ * @param {{ recorderService: {
+ *   startMonitoring: (opts: {channels?: any}) => any,
+ *   stopMonitoring: (opts: {stopRecordings?: boolean}) => Promise<any>,
+ *   checkChannels: () => Promise<any>,
+ *   startChannel: (channel: any) => Promise<any>,
+ *   stopRecording: (stage: any) => Promise<any>,
+ *   stopAll: () => Promise<void>,
+ *   getStatus: () => any
+ * } }} options - Options object containing the `recorderService` used by the routes.
+ */
 export function registerRecorderRoutes(app, { recorderService }) {
   app.post('/api/recorder/monitor/start', (req, res) => {
     const { channels } = req.body || {};
