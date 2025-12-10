@@ -17,7 +17,7 @@ import {
   paginationDesktop,
 } from './dom.js';
 import { state, getLibraryPageSize } from './state.js';
-import { escapeAttr, formatDuration, formatSize, formatTime } from './ui.js';
+import { escapeAttr, formatClock, formatDuration, formatSize, formatTime } from './ui.js';
 import { isAbortError } from './api.js';
 import { fetchProgressiveStreamUrl, stopAllLiveAudio } from './live.js';
 
@@ -58,6 +58,105 @@ const sortItems = (items, sortKey) => {
       break;
   }
   return sorted;
+};
+
+let currentAudio = null;
+let currentCard = null;
+let progressRaf = null;
+
+const resetProgressUi = (card) => {
+  if (!card) return;
+  const fill = card.querySelector('.player-progress__fill');
+  const thumb = card.querySelector('.player-progress__thumb');
+  const time = card.querySelector('[data-progress-time]');
+  if (fill) fill.style.width = '0%';
+  if (thumb) thumb.style.left = '0%';
+  if (time) time.textContent = '00:00';
+};
+
+const setCardPlayingState = (card, playing) => {
+  if (!card) return;
+  card.classList.toggle('is-playing', playing);
+  const btn = card.querySelector('.play-btn');
+  const icon = card.querySelector('.player-main-btn__icon');
+  if (btn) {
+    btn.classList.toggle('active', playing);
+    btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+  }
+  // Use innerHTML so the SVG renders instead of showing escaped text
+  if (icon) icon.innerHTML = playing ?
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"></path></svg>' :
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>';
+};
+
+const stopCurrentLibraryAudio = () => {
+  if (progressRaf) cancelAnimationFrame(progressRaf);
+  progressRaf = null;
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+  }
+  if (currentCard) {
+    setCardPlayingState(currentCard, false);
+    resetProgressUi(currentCard);
+  }
+  currentAudio = null;
+  currentCard = null;
+  state.libraryIsPlaying = false;
+};
+
+const startProgressLoop = () => {
+  if (!currentAudio || currentAudio.paused) return;
+  if (progressRaf) cancelAnimationFrame(progressRaf);
+  const step = () => {
+    if (!currentAudio || currentAudio.paused) return;
+    const duration = Number.isFinite(currentAudio.duration) ? currentAudio.duration : 0;
+    const currentTime = Number.isFinite(currentAudio.currentTime) ? currentAudio.currentTime : 0;
+    const pct = duration ? Math.min((currentTime / duration) * 100, 100) : 0;
+    if (currentCard) {
+      const fill = currentCard.querySelector('.player-progress__fill');
+      const thumb = currentCard.querySelector('.player-progress__thumb');
+      const time = currentCard.querySelector('[data-progress-time]');
+      if (fill) fill.style.width = `${pct}%`;
+      if (thumb) thumb.style.left = `${pct}%`;
+      if (time) time.textContent = formatClock(currentTime);
+    }
+    progressRaf = requestAnimationFrame(step);
+  };
+  progressRaf = requestAnimationFrame(step);
+};
+
+const attachAudioHandlers = (audio, card, playKey, deps) => {
+  audio.addEventListener('play', () => {
+    state.libraryIsPlaying = true;
+    setCardPlayingState(card, true);
+    startProgressLoop();
+    recordPlay(playKey, deps).then((cnt) => {
+      const playPill = card.querySelector('.play-pill');
+      if (playPill) {
+        const updated = cnt ?? state.playCounts[playKey] ?? 0;
+        playPill.textContent = `${updated}`;
+      }
+    });
+  });
+
+  audio.addEventListener('pause', () => {
+    if (progressRaf) cancelAnimationFrame(progressRaf);
+    progressRaf = null;
+    setCardPlayingState(card, false);
+    state.libraryIsPlaying = false;
+  });
+
+  audio.addEventListener('ended', () => {
+    stopCurrentLibraryAudio();
+  });
+
+  audio.addEventListener('loadedmetadata', () => {
+    const total = card.querySelector('[data-progress-total]');
+    if (total && Number.isFinite(audio.duration)) {
+      total.textContent = formatClock(audio.duration);
+    }
+  });
 };
 
 const renderLibrarySkeleton = (count = 3) => {
@@ -155,17 +254,44 @@ const attachCardHandlers = (cardEls, paged, startIdx, deps) => {
     const deleteBtn = card.querySelector('.delete-btn');
 
     if (playBtn && playbackUrl) {
+      let audio = card._libraryAudio;
+      if (!audio) {
+        audio = document.createElement('audio');
+        audio.className = 'library-hidden-audio';
+        audio.preload = 'metadata';
+        card.querySelector('.player-shell')?.appendChild(audio);
+        card._libraryAudio = audio;
+        attachAudioHandlers(audio, card, playKey, deps);
+      }
+
       playBtn.addEventListener('click', () => {
         stopAllLiveAudio();
-        const audio = new Audio(playbackUrl);
-        audio.play().catch((err) => {
-          if (isAbortError(err)) return;
-          deps.showToast(err.message || 'Could not start playback', 'error');
-        });
         fetchProgressiveStreamUrl(channel).then((prog) => {
           if (!prog) return;
           if (state.liveProgressiveCache.get(channelKey) === prog) return;
           state.liveProgressiveCache.set(channelKey, prog);
+        });
+
+        if (currentAudio && currentCard === card) {
+          if (currentAudio.paused) {
+            currentAudio.play().catch((err) => {
+              if (isAbortError(err)) return;
+              deps.showToast(err.message || 'Could not resume playback', 'error');
+            });
+          } else {
+            currentAudio.pause();
+          }
+          return;
+        }
+
+        stopCurrentLibraryAudio();
+        currentAudio = audio;
+        currentCard = card;
+        audio.src = playbackUrl;
+        audio.play().catch((err) => {
+          if (isAbortError(err)) return;
+          deps.showToast(err.message || 'Could not start playback', 'error');
+          stopCurrentLibraryAudio();
         });
       });
     }
@@ -231,13 +357,18 @@ const attachCardHandlers = (cardEls, paged, startIdx, deps) => {
         if (!confirmDelete) return;
         deleteBtn.disabled = true;
         try {
-          await deps.api('/api/recordings', { method: 'DELETE', body: JSON.stringify({ path: itemPath }) });
+          const res = await deps.api('/api/recordings', { method: 'DELETE', body: JSON.stringify({ path: itemPath }) });
+          if (res?.error) {
+            const err = new Error(res.error);
+            if (res.error.toLowerCase().includes('unauthorized')) err.isUnauthorized = true;
+            throw err;
+          }
           state.libraryItems = state.libraryItems.filter((libItem) => (libItem.path || libItem.relativePath) !== itemPath);
           deps.render();
           deps.showToast('Recording deleted');
         } catch (err) {
-          if (err?.isUnauthorized) return;
-          deps.showToast(err.message, 'error');
+          const msg = err?.message || 'Could not delete recording';
+          deps.showToast(err?.isUnauthorized ? `Unauthorized: ${msg}` : msg, 'error');
         } finally {
           deleteBtn.disabled = false;
         }
@@ -289,6 +420,7 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
     const durationSeconds = Number.isFinite(item.duration) ? item.duration : 0;
     const duration = durationSeconds ? formatDuration(durationSeconds) : null;
     const playbackUrl = item.downloadUrl || item.url;
+    const logo = item.logo || '';
     const playKey = item.playKey || item.path || item.relativePath || playbackUrl || item.url;
     const plays = state.playCounts[playKey] ?? item.playCount ?? 0;
     const when = formatTime(item.date ?? item.mtime);
@@ -301,9 +433,22 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
     const stage = item.stage || 'Unknown stage';
     const durationLabel = duration ? `${duration} • ${size}` : size;
 
-    const progress = item.waveform && item.waveform.length
+    const progressVisual = item.waveform && item.waveform.length
       ? `<div class="sparkline" data-points="${escapeAttr(waveform)}"></div>`
-      : '<div class="h-3 bg-white/10 rounded-full"></div>';
+      : '';
+    const progressMarkup = `
+      <div class="player-progress-bar">
+        ${progressVisual}
+        <div class="player-progress__track">
+          <div class="player-progress__fill"></div>
+          <div class="player-progress__thumb"></div>
+        </div>
+        <div class="player-progress__time">
+          <span class="player-time player-time--current" data-progress-time>00:00</span>
+          <span class="player-time player-time--total" data-progress-total>${duration || '—'}</span>
+        </div>
+      </div>
+    `;
 
     return `
       <div class="library-card player-card p-0" data-song-index="${startIdx + idx}">
@@ -312,18 +457,17 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
             <div class="player-head">
               <div class="player-meta">
                 <div class="player-cover">
-                  <div class="player-cover__inner"></div>
+                  <div class="player-cover__inner">${logo ? `<img src="${logo}" alt="${escapeAttr(fileName)}" class="w-full h-full object-cover">` : ''}</div>
                 </div>
                 <div class="player-text">
                   <div class="player-topline">
-                    <p class="player-kicker">${channel}</p>
                     <div class="flex items-center gap-2">
                       <span class="player-icon-btn  bg-white/10 border border-white/15 text-[11px] font-semibold play-pill">${plays}</span>
                       <span class="player-icon-btn border border-white/10 bg-white/5 text-[11px] font-semibold">${stage}</span>
                     </div>
                   </div>
                   <div class="player-title">
-                    <p class="text-lg font-semibold text-white">${fileSafe}</p>
+                    <p class="text-lg font-semibold text-white">${channel}</p>
                   </div>
                   <div class="player-subtitle">
                     <p class="text-sm text-slate-300">${when}</p>
@@ -331,22 +475,26 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
                 </div>
               </div>
             </div>
-            <div class="player-progress">
-              ${progress}
+          <div class="player-progress">
+              ${progressMarkup}
             </div>
           </div>
           <div class="player-divider"></div>
           <div class="player-bottom">
-            <div class="player-pill">${durationLabel}</div>
-            <div class="player-icon-row">
-              <button class="player-icon-btn play-btn" data-url="${escapeAttr(playbackUrl)}" data-key="${escapeAttr(playKey)}" data-channel="${escapeAttr(channel)}">
-                ▶
+            <div class="player-icon-row player-icon-row--wide">
+              <button class="player-main-btn play-btn" aria-pressed="false" aria-label="Play ${escapeAttr(fileName)}">
+                <span class="player-main-btn__icon">
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+                </span>
               </button>
-              <button class="player-icon-btn play-live-btn" data-channel="${escapeAttr(channel)}" data-key="${escapeAttr(playKey)}">
-                🔴
-              </button>
-              <a class="player-icon-btn download-btn" href="/recordings/${escapeAttr(itemPath)}" download="${escapeAttr(fileName)}">⬇</a>
-              <button class="player-icon-btn delete-btn" data-path="${escapeAttr(itemPath)}" aria-label="Delete ${escapeAttr(fileName)}">🗑</button>
+              <div class="player-icon-group">
+                <a class="player-icon-btn download-btn" href="/recordings/${escapeAttr(itemPath)}" download="${escapeAttr(fileName)}" aria-label="Download ${escapeAttr(fileName)}">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 19h14"></path></svg>
+                </a>
+                <button class="player-icon-btn delete-btn" data-path="${escapeAttr(itemPath)}" aria-label="Delete ${escapeAttr(fileName)}">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7h12"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v3"></path></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>

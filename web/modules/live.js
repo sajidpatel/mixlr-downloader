@@ -2,6 +2,19 @@ import { liveBody, liveCount } from './dom.js';
 import { state } from './state.js';
 import { isAbortError } from './api.js';
 
+const channelSlugAliases = {
+  'dhikr majlis live': 'sufiuk',
+  "islamic da'wah academy": 'idauk',
+};
+
+const normalizeChannelSlug = (channel) => {
+  if (!channel) return '';
+  const raw = channel.toString().trim().toLowerCase();
+  if (channelSlugAliases[raw]) return channelSlugAliases[raw];
+  // Fallback: basic slug from spaces to hyphens
+  return raw.replace(/\s+/g, '-');
+};
+
 export const destroyLiveHls = (audio) => {
   const existing = state.liveHlsMap.get(audio);
   if (existing) {
@@ -25,11 +38,12 @@ export const stopAllLiveAudio = () => {
 };
 
 export const fetchProgressiveStreamUrl = async (channel) => {
-  if (!channel) return null;
-  const key = channel.toString().toLowerCase();
+  const slug = normalizeChannelSlug(channel);
+  if (!slug) return null;
+  const key = slug;
   if (state.liveProgressiveCache.has(key)) return state.liveProgressiveCache.get(key);
   try {
-    const res = await fetch(`https://apicdn.mixlr.com/v3/channel_view/${encodeURIComponent(channel)}`, { cache: 'no-store' });
+    const res = await fetch(`https://apicdn.mixlr.com/v3/channel_view/${encodeURIComponent(key)}`, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     const broadcasts = Array.isArray(data?.included) ? data.included.filter((item) => item.type === 'broadcast') : [];

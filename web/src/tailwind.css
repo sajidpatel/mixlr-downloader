@@ -436,6 +436,11 @@ audio::-webkit-media-controls-volume-slider-container {
   min-width: 0;
 }
 
+.player-icon-row--wide {
+  gap: 1.5rem;
+  align-items: center;
+}
+
 .player-icon-group {
   display: flex;
   align-items: center;
@@ -529,6 +534,59 @@ audio::-webkit-media-controls-volume-slider-container {
 
 .player-card.is-playing .player-cover {
   box-shadow: 0 18px 38px -20px rgba(56, 189, 248, 0.45);
+}
+
+.player-progress-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.player-progress__track {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(148, 163, 184, 0.08));
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.player-progress__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(14, 165, 233, 0.9));
+  box-shadow: 0 12px 32px -16px rgba(56, 189, 248, 0.55);
+  transition: width 120ms ease;
+}
+
+.player-progress__thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(148, 197, 255, 0.9));
+  box-shadow: 0 10px 25px -16px rgba(56, 189, 248, 0.9);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.player-progress__time {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #9fb4d3;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-time--total {
+  color: #7f92b2;
 }
 
 .live-card .player-main-btn {

@@ -21,6 +21,17 @@ export const DEFAULT_CHANNELS = [
 
 const safeFetch = (...args) => (globalThis.fetch ? globalThis.fetch(...args) : fetch(...args));
 
+function normalizeChannelSlug(channel) {
+  if (!channel) return '';
+  const raw = channel.toString().trim().toLowerCase();
+  const aliases = {
+    'dhikr majlis live': 'sufiuk', // user-facing name maps to slug
+    "islamic da'wah academy": 'idauk',
+  };
+  if (aliases[raw]) return aliases[raw];
+  return raw;
+}
+
 function normalizeRoot(rootDir) {
   return path.resolve(rootDir || '.');
 }
@@ -270,8 +281,10 @@ export class RecorderService {
 
   async fetchStreamInfo(channel) {
     try {
-      const slug = channel?.toString().toLowerCase();
-      const response = await safeFetch(`${API_BASE_URL}${slug}`);
+      const slug = normalizeChannelSlug(channel);
+      const encodedSlug = slug ? encodeURIComponent(slug) : '';
+      console.log(`${API_BASE_URL}${encodedSlug}`);
+      const response = await safeFetch(`${API_BASE_URL}${encodedSlug}`);
       if (!response.ok) {
         this.error(`[${slug}] Error fetching API: ${response.statusText}`);
         return null;

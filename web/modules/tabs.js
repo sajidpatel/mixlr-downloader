@@ -10,6 +10,13 @@ export const showTab = (tab) => {
   tabPanels.forEach((panel) => {
     const active = panel.dataset.tabPanel === tab;
     panel.hidden = !active;
+    if (active) {
+      panel.classList.add('is-active');
+      panel.removeAttribute('hidden');
+    } else {
+      panel.classList.remove('is-active');
+      panel.setAttribute('hidden', '');
+    }
   });
 };
 
