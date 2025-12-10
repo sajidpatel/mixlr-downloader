@@ -8,6 +8,7 @@
     "recorder:tui": "node tools/recorder/index.js",
     "recorder:tui:watch": "node --watch tools/recorder/index.js",
     "convert": "node tools/converter/index.js",
+    "monitor:live": "node server/liveMonitorWorker.js --loop",
     "build:css": "tailwindcss -i ./web/src/tailwind.css -o ./web/dist/tailwind.css --minify",
     "dev:css": "tailwindcss -i ./web/src/tailwind.css -o ./web/dist/tailwind.css --watch",
     "watch:tailwind": "tailwindcss -i ./web/src/tailwind.css -o ./web/dist/tailwind.css --watch",

@@ -22,6 +22,7 @@ RUN npm ci --omit=dev
 
 # App code + built assets.
 COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/server ./server
 COPY --from=builder /app/web ./web
 COPY --from=builder /app/tools ./tools
 COPY --from=builder /app/docs ./docs
@@ -36,6 +37,7 @@ RUN mkdir -p /app/recordings /app/hls \
 USER node
 EXPOSE 3000
 ENV PORT=3000
+ENV BIND_ADDRESS=0.0.0.0
 
 VOLUME ["/app/recordings", "/app/hls"]
 
