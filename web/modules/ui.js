@@ -73,3 +73,5 @@ export const createToast = (toastEl) => (message, type = 'info') => {
   toastEl.classList.remove('hidden');
   setTimeout(() => toastEl.classList.add('hidden'), 2200);
 };
+
+export const clamp = (val, min, max) => Math.min(Math.max(val, min), max);

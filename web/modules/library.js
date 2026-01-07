@@ -17,7 +17,7 @@ import {
   paginationDesktop,
 } from './dom.js';
 import { state, getLibraryPageSize } from './state.js';
-import { escapeAttr, formatClock, formatDuration, formatSize, formatTime } from './ui.js';
+import { escapeAttr, formatClock, formatDuration, formatSize, formatTime, clamp } from './ui.js';
 import { isAbortError } from './api.js';
 import { fetchProgressiveStreamUrl, stopAllLiveAudio } from './live.js';
 
@@ -410,6 +410,63 @@ const attachCardHandlers = (cardEls, paged, startIdx, deps) => {
         }
       });
     }
+
+    const progressBar = card.querySelector('.player-progress-bar');
+    if (progressBar) {
+      progressBar.style.cursor = 'pointer';
+      progressBar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const audio = ensureLibraryAudio();
+        if (!audio) return;
+
+        const track = card.querySelector('.player-progress__track');
+        if (!track) return;
+
+        const rect = track.getBoundingClientRect();
+        const relativeX = e.clientX - rect.left;
+        const pos = clamp(relativeX / rect.width, 0, 1);
+
+        const seek = () => {
+          const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+          if (duration > 0) {
+             const targetTime = duration * pos;
+
+             // Logic to switch track if needed
+             if (currentCard !== card) {
+                stopAllLiveAudio();
+                stopCurrentLibraryAudio();
+                currentCard = card;
+                currentAudio = audio;
+             }
+
+             // Always ensure we are playing
+             if (audio.paused) {
+                audio.play().catch((err) => {
+                  if (isAbortError(err)) return;
+                  deps.showToast(err.message || 'Could not start playback', 'error');
+                });
+             }
+
+             audio.currentTime = targetTime;
+
+             // Immediate visual update for responsiveness
+             const fill = card.querySelector('.player-progress__fill');
+             const thumb = card.querySelector('.player-progress__thumb');
+             const time = card.querySelector('[data-progress-time]');
+             const pct = Math.min(pos * 100, 100);
+             if (fill) fill.style.width = `${pct}%`;
+             if (thumb) thumb.style.left = `${pct}%`;
+             if (time) time.textContent = formatClock(targetTime);
+          }
+        };
+
+        if (audio.readyState > 0) {
+          seek();
+        } else {
+          audio.addEventListener('loadedmetadata', seek, { once: true });
+        }
+      });
+    }
   });
 };
 
@@ -497,9 +554,18 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
                 </div>
                 <div class="player-text">
                   <div class="player-topline">
-                    <div class="flex items-center gap-2">
-                      <span class="player-icon-btn  bg-white/10 border border-white/15 text-[11px] font-semibold play-pill">${plays}</span>
-                      <span class="player-icon-btn border border-white/10 bg-white/5 text-[11px] font-semibold">${stage}</span>
+                    <div class="flex items-center justify-between w-full">
+                      <div class="flex items-center gap-2">
+                        <span class="player-icon-btn  bg-white/10 border border-white/15 text-[11px] font-semibold play-pill">${plays}</span>
+                      </div>
+                      <div class="player-icon-group flex items-center gap-1">
+                        <a class="player-icon-btn download-btn" href="/recordings/${escapeAttr(itemPath)}" download="${escapeAttr(fileName)}" aria-label="Download ${escapeAttr(fileName)}">
+                          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 19h14"></path></svg>
+                        </a>
+                        <button class="player-icon-btn delete-btn" data-path="${escapeAttr(itemPath)}" aria-label="Delete ${escapeAttr(fileName)}">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7h12"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v3"></path></svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div class="player-title">
@@ -535,14 +601,7 @@ export const renderLibrary = (items = [], query = '', channelFilter = 'all', sor
                   <path d="M12 5 19 12 12 19"></path>
                 </svg>
               </button>
-              <div class="player-icon-group">
-                <a class="player-icon-btn download-btn" href="/recordings/${escapeAttr(itemPath)}" download="${escapeAttr(fileName)}" aria-label="Download ${escapeAttr(fileName)}">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 19h14"></path></svg>
-                </a>
-                <button class="player-icon-btn delete-btn" data-path="${escapeAttr(itemPath)}" aria-label="Delete ${escapeAttr(fileName)}">
-                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 7h12"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v3"></path></svg>
-                </button>
-              </div>
+
             </div>
           </div>
         </div>

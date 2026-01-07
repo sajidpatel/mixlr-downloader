@@ -37,7 +37,6 @@ const bootstrap = () => {
   bindLibraryControls(deps);
 
   ensureLibraryLoaded('library', deps);
-  loadLibrary({ markLoaded: true }, deps);
 };
 
 bootstrap();

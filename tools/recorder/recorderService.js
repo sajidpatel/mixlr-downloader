@@ -13,7 +13,6 @@ export const DEFAULT_CHANNELS = [
   'khanqahblackburn',
   'spiritual-light',
   'attabligweb',
-  'sufiuk',
   'shaykhyunushaleebi',
   'croydonmosque',
   'muftiahmedkhanpuri',
@@ -687,6 +686,7 @@ export class RecorderService {
           cover,
           logo,
           themeColor: channelMedia?.themeColor || null,
+          stage: channelMedia?.stageName || null,
         });
       }
     }

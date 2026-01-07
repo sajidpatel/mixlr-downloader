@@ -4,11 +4,11 @@ import path from 'path';
 import { spawn } from 'child_process';
 import processAdapter from '../process/processAdapter.js';
 
-async function commandExists(cmd) {
+async function checkCommand(cmd) {
   return new Promise((resolve) => {
     const proc = spawn(cmd, ['-version']);
-    proc.on('error', () => resolve(false));
-    proc.on('exit', (code) => resolve(code === 0 || code === 1));
+    proc.on('error', (err) => resolve({ ok: false, error: err }));
+    proc.on('exit', (code, signal) => resolve({ ok: code === 0 || code === 1, code, signal }));
   });
 }
 
@@ -76,11 +76,15 @@ export async function convertDirectory({
   inputDir = 'recordings',
   deleteSource = false,
   onLog = console.log,
-  commandExistsFn = commandExists,
+  checkCommandFn = checkCommand,
   convertFileFn = convertFile,
 } = {}) {
-  if (!await commandExistsFn('ffmpeg')) {
-    throw new Error('ffmpeg is required but was not found in PATH.');
+  const check = await checkCommandFn('ffmpeg');
+  if (!check.ok) {
+    if (check.error?.code === 'ENOENT') {
+      throw new Error('ffmpeg is required but was not found in PATH.');
+    }
+    throw new Error(`ffmpeg was found but failed to execute (code: ${check.code}, signal: ${check.signal}). Please reinstall ffmpeg.`);
   }
 
   await ensureDirectoryExists(inputDir);
