@@ -49,6 +49,18 @@ registerLiveRoutes(app, { recorderService, hlsService, processAdapter, streamGro
 registerPlayRoutes(app, { playCountStore });
 registerFallbackRoute(app, { webRoot });
 
+/**
+ * Start the HTTP server, prepare required directories, and begin status broadcasting.
+ *
+ * Attempts to bind the Express app to the given port and host, logs the accessible URL on success,
+ * ensures recording and HLS directories exist before starting the status broadcaster, and on bind
+ * conflicts retries with the next port up to MAX_PORT_ATTEMPTS; exits the process on unrecoverable errors.
+ *
+ * @param {number} [port=PORT] - TCP port to listen on.
+ * @param {string} [host=HOST] - Host/interface to bind the server to.
+ * @param {number} [attempt=0] - Current retry attempt count (used internally when retrying ports).
+ * @returns {import('http').Server} The created HTTP server instance.
+ */
 export function startServer(port = PORT, host = HOST, attempt = 0) {
   const server = app
     .listen(port, host, () => {

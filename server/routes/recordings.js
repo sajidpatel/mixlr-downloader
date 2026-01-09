@@ -3,6 +3,24 @@ import fs from 'fs/promises';
 import { API_TOKEN, isTruthy } from '../config.js';
 import { buildAltRelPath, playKeyForItem } from '../utils.js';
 
+/**
+ * Register HTTP routes for serving, streaming, listing, and deleting recordings on the provided app.
+ *
+ * Registers:
+ * - GET /recordings/* to serve recording files (with optional follow/live handling and on-the-fly AAC→MP3 transcoding),
+ * - GET /api/stream/recording to stream a recording or live source as MP3,
+ * - GET /api/recordings to list recordings with play-count metadata,
+ * - DELETE /api/recordings to delete a recording (requires API token).
+ *
+ * @param {import('express').Application} app - Express-like application instance to attach routes to.
+ * @param {Object} options - Route helpers and services.
+ * @param {{ resolveRecordingPath: (relPath: string)=>string, normalizedExt: (filePath: string)=>string, listRecordingsFlat: Function, getChannelMedia: Function }} options.recorderService - Service for resolving recording paths, normalizing extensions, and listing recordings.
+ * @param {{ spawnProcess: Function }} options.processAdapter - Adapter to spawn and manage external processes (used for ffmpeg streaming/transcoding).
+ * @param {Function} options.streamGrowingFile - Handler that streams a file being written to (follow mode).
+ * @param {Function} options.serveFileWithRange - Handler that serves static files with HTTP Range support.
+ * @param {string} options.recordingsRoot - Root directory used when listing recordings.
+ * @param {{ get: (key: string)=>number }} options.playCountStore - Store providing play counts by play key.
+ */
 export function registerRecordingRoutes(app, {
   recorderService,
   processAdapter,
