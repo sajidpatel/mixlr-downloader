@@ -196,8 +196,9 @@ export function registerRecordingRoutes(app, {
       const dir = path.dirname(filePath);
       try {
         const remaining = await fs.readdir(dir);
-        if (!remaining.length) await fs.rmdir(dir);
+       if (!remaining.length) await fs.rmdir(dir);
       } catch {}
+      await recorderService.refreshRecordingsList();
       res.json({ ok: true });
     } catch (err) {
       if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });

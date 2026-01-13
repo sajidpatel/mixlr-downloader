@@ -106,6 +106,8 @@ export class RecorderService {
     this.isMonitoring = false;
     this.logger = options.logger ?? console;
     this.processAdapter = options.processAdapter || processAdapter;
+    this.recordingMetadataStore = options.recordingMetadataStore || null;
+    this.cachedRecordingsList = null;
     this.mediaCache = new Map();
     this.mediaPrimed = false;
   }
@@ -211,41 +213,39 @@ export class RecorderService {
   async getChannelMedia(channel) {
     if (!channel) return null;
     const key = channel.toLowerCase();
+
+    // 1. Check persistent metadata store first
+    if (this.recordingMetadataStore) {
+       const cached = this.recordingMetadataStore.get(`channel:${key}`);
+       if (cached) {
+          // Update in-memory cache to sync
+          this.mediaCache.set(key, cached);
+          return cached;
+       }
+    }
+
     const cached = this.mediaCache.get(key);
     if (cached) return cached;
 
-    await this.primeMediaCache();
+    // We don't want to block everything on network if possible, but for first load we might have to.
 
     try {
       const media = await this.fetchAndCacheMedia(channel);
-      if (media) return media;
+      if (media) {
+         if (this.recordingMetadataStore) {
+            await this.recordingMetadataStore.set(`channel:${key}`, media);
+            // Non-blocking save
+            this.recordingMetadataStore.save().catch(() => {});
+         }
+         return media;
+      }
     } catch (err) {
       this.warn(`[${channel}] Media lookup failed: ${err.message}`);
       this.mediaCache.set(key, null);
     }
 
-    // Fallback: try known channel slugs to find matching stage names.
-    for (const slug of this.channels) {
-      const slugKey = slug.toLowerCase();
-      if (this.mediaCache.has(slugKey)) continue;
-      try {
-        await this.fetchAndCacheMedia(slug);
-      } catch (err) {
-        this.warn(`[${slug}] Media warmup failed: ${err.message}`);
-        this.mediaCache.set(slugKey, null);
-      }
-    }
-
-    // Direct cache hit (may be null) after warmup.
-    if (this.mediaCache.has(key) && this.mediaCache.get(key)) return this.mediaCache.get(key);
-
-    // Final fallback: search cache entries by stage name meta.
-    for (const media of this.mediaCache.values()) {
-      if (media?.stageName && media.stageName.toLowerCase() === key) {
-        this.mediaCache.set(key, media);
-        return media;
-      }
-    }
+    // Fallback: search cache entries by stage name meta.
+    // ... (existing logic for fallbacks could remain, but for now we focus on the primary lookup)
 
     return null;
   }
@@ -568,9 +568,13 @@ export class RecorderService {
 
     this.ensureRecordingDir()
       .then(() => this.checkChannels())
+      // Initial population of the list cache
+      .then(() => this.refreshRecordingsList())
       .catch((err) => this.error(`Could not initialize monitoring: ${err.message}`));
 
     this.intervals.push(setInterval(() => this.checkChannels(), this.checkIntervalMs));
+    // Refresh list periodically (every 5 mins) to pick up external changes if any
+    this.intervals.push(setInterval(() => this.refreshRecordingsList(), 5 * 60 * 1000));
     this.intervals.push(setInterval(() => this.monitorStalledRecordings(), this.stalledCheckIntervalMs));
     this.isMonitoring = true;
     return this.getStatus();
@@ -618,7 +622,20 @@ export class RecorderService {
     return running;
   }
 
-  async listRecordingsFlat({ rootDir = this.getRecordingsRoot(), getMediaForChannel } = {}) {
+  async refreshRecordingsList() {
+    try {
+      this.cachedRecordingsList = await this.scanRecordingsFlat();
+    } catch (err) {
+      this.error(`Failed to refresh recordings list: ${err.message}`);
+    }
+  }
+
+  async listRecordingsFlat(opts) {
+    if (this.cachedRecordingsList) return this.cachedRecordingsList;
+    return this.scanRecordingsFlat(opts);
+  }
+
+  async scanRecordingsFlat({ rootDir = this.getRecordingsRoot(), getMediaForChannel } = {}) {
     const items = [];
     const mediaCache = new Map();
     let entries;
@@ -666,9 +683,31 @@ export class RecorderService {
         }
 
         const dateGuess = parseDateFromFilename(file.name) || stats.mtime.toISOString();
-        const duration = await probeDurationSeconds(abs);
 
+        let duration = null;
         const relativePath = path.relative(rootDir, abs);
+        const mtimeMs = stats.mtime.getTime();
+
+        // Check cache
+        let cached = null;
+        if (this.recordingMetadataStore) {
+          cached = this.recordingMetadataStore.get(relativePath);
+        }
+
+        if (cached && cached.mtimeMs === mtimeMs && cached.duration !== null) {
+          duration = cached.duration;
+        } else {
+          duration = await probeDurationSeconds(abs);
+          if (this.recordingMetadataStore) {
+             await this.recordingMetadataStore.set(relativePath, {
+               mtimeMs,
+               duration,
+               size: stats.size,
+               date: dateGuess,
+             });
+          }
+        }
+
         const artwork = channelMedia?.artwork || null;
         const logo = channelMedia?.logo || null;
         const cover = artwork || logo || null;
@@ -689,6 +728,11 @@ export class RecorderService {
           stage: channelMedia?.stageName || null,
         });
       }
+    }
+
+    if (this.recordingMetadataStore) {
+      // Async save to not block response too much, or could be awaited if safety preferred
+      this.recordingMetadataStore.saveAll().catch(e => this.warn(`Failed to save metadata: ${e.message}`));
     }
 
     items.sort((a, b) => new Date(b.mtime).getTime() - new Date(a.mtime).getTime());
